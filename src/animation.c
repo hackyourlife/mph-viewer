@@ -221,19 +221,6 @@ void load_animation(CAnimation** animation, const char* filename, CModel* model,
 
 CAnimation* parse_animation(Animation* animation, CModel* model)
 {
-#if 0
-	signed int i; // r5
-	int ptr; // r4
-	_DWORD *v6; // r2
-	MaterialAnimationData **v7; // r2
-	TexcoordAnimationData **v8; // r2
-	TextureAnimationData **v9; // r2
-	NodeAnimationData *v10; // r2 MAPDST
-	MaterialAnimationData *v14; // r2 MAPDST
-	TexcoordAnimationData *v16; // r2 MAPDST
-	TextureAnimationData *v20; // r2 MAPDST
-#endif
-
 	unsigned int i;
 
 	CAnimation* anim = (CAnimation*) alloc_from_heap(sizeof(CAnimation));
@@ -330,97 +317,14 @@ CAnimation* parse_animation(Animation* animation, CModel* model)
 
 	model->animation = anim;
 
-#if 0
-	if(animation->node_animations)
-		offset_to_pointer((void **)&animation->node_animations, animation);
-	if(animation->field_4)
-		offset_to_pointer(&animation->field_4, animation);
-	if(animation->material_animations)
-		offset_to_pointer((void **)&animation->material_animations, animation);
-	if(animation->texcoord_animations)
-		offset_to_pointer((void **)&animation->texcoord_animations, animation);
-	if(animation->texture_animations)
-		offset_to_pointer((void **)&animation->texture_animations, animation);
-	for(i = 0; i < animation->count; i++) {
-		if(animation->node_animations[i])
-			offset_to_pointer((void **)&animation->node_animations[i], animation);
-		v6 = animation->field_4;
-		if(v6[i])
-			offset_to_pointer((void **)&v6[i], animation);
-		v7 = animation->material_animations;
-		if(v7[i])
-			offset_to_pointer((void **)&v7[i], animation);
-		v8 = animation->texcoord_animations;
-		if(v8[i])
-			offset_to_pointer((void **)&v8[i], animation);
-		v9 = animation->texture_animations;
-		if(v9[i])
-			offset_to_pointer((void **)&v9[i], animation);
-		v10 = animation->node_animations[i];
-		if(v10) {
-			if(v10->fx32_ptr)
-				offset_to_pointer((void **)&v10->fx32_ptr, animation);
-			v10 = animation->node_animations[i];
-			if(v10->short_ptr)
-				offset_to_pointer((void **)&v10->short_ptr, animation);
-			v10 = animation->node_animations[i];
-			if(v10->int_ptr)
-				offset_to_pointer((void **)&v10->int_ptr, animation);
-			v10 = animation->node_animations[i];
-			if(v10->node_animations)
-				offset_to_pointer((void **)&v10->node_animations, animation);
-			parse_node_animation(model->nodes, model->num_nodes, animation->node_animations[i]);
-		}
-		v14 = animation->material_animations[i];
-		if(v14) {
-			if(v14->color_lut)
-				offset_to_pointer((void **)&v14->color_lut, animation);
-			v14 = animation->material_animations[i];
-			if(v14->material_animation)
-				offset_to_pointer((void **)&v14->material_animation, animation);
-			parse_material_animation(model, animation->material_animations[i]);
-		}
-		v16 = animation->texcoord_animations[i];
-		if(v16) {
-			if(v16->scale_texcoord_lut)
-				offset_to_pointer((void **)&v16->scale_texcoord_lut, animation);
-			v16 = animation->texcoord_animations[i];
-			if(v16->rot_lut)
-				offset_to_pointer((void **)&v16->rot_lut, animation);
-			v16 = animation->texcoord_animations[i];
-			if(v16->translate_lut)
-				offset_to_pointer((void **)&v16->translate_lut, animation);
-			v16 = animation->texcoord_animations[i];
-			if(v16->texcoord_animations)
-				offset_to_pointer((void **)&v16->texcoord_animations, animation);
-			parse_texcoord_animation(model, animation->texcoord_animations[i]);
-		}
-		v20 = animation->texture_animations[i];
-		if(v20) {
-			if(v20->frames)
-				offset_to_pointer((void **)&v20->frames, animation);
-			v20 = animation->texture_animations[i];
-			if(v20->texids)
-				offset_to_pointer((void **)&v20->texids, animation);
-			v20 = animation->texture_animations[i];
-			if(v20->pals)
-				offset_to_pointer((void **)&v20->pals, animation);
-			v20 = animation->texture_animations[i];
-			if(v20->texture_animations)
-				offset_to_pointer((void **)&v20->texture_animations, animation);
-			parse_texture_animation(model, animation->texture_animations[i]);
-		}
-	}
-#endif
-
 	return anim;
 }
 
 void parse_texcoord_animation(CModel* model, CTexcoordAnimationGroup* animation_group)
 {
-	unsigned int i; // r8
-	int j; // r7
-	MATERIAL* mtl; // r1
+	unsigned int i;
+	int j;
+	MATERIAL* mtl;
 
 	animation_group->current_frame = 0;
 	model->texcoord_animations = animation_group;
@@ -442,12 +346,12 @@ void parse_texcoord_animation(CModel* model, CTexcoordAnimationGroup* animation_
 
 float animate_texcoord(float* lut, int anim_frame, int t, int length, int frame_count)
 {
-	int result; // r0
-	int t_half; // lr
-	int v7; // r2
-	int idx_1; // r12
-	int idx_2; // r5
-	int blend_factor; // r1
+	int result;
+	int t_half;
+	int v7;
+	int idx_1;
+	int idx_2;
+	int blend_factor;
 
 	if(length == 1)
 		return *lut;
@@ -467,7 +371,7 @@ float animate_texcoord(float* lut, int anim_frame, int t, int length, int frame_
 
 	blend_factor = anim_frame & (t_half | 1);
 	if(blend_factor)
-		result = lut[idx_1] * (1 - (blend_factor << 12 >> t_half)) + (lut[idx_2] * (blend_factor << 12 >> t_half));
+		result = lut[idx_1] * (1.0 - (blend_factor >> t_half)) + (lut[idx_2] * (float) (blend_factor >> t_half));
 	else
 		result = lut[idx_1];
 	return result;
