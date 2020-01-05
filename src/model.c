@@ -8,12 +8,15 @@
 #include <string.h>
 #include <malloc.h>
 #include <float.h>
+#include <math.h>
 #include <GL/gl.h>
 #include <GL/glext.h> // for mingw
 
 #include "types.h"
+#include "mtx.h"
 #include "endianess.h"
 #include "model.h"
+#include "animation.h"
 #include "io.h"
 #include "heap.h"
 #include "os.h"
@@ -107,7 +110,6 @@ typedef struct {
 
 typedef struct {
 	u8		name[64];
-	// u32		dunno[104];
 	u16		parent;
 	u16		child;
 	u16		next;
@@ -115,23 +117,19 @@ typedef struct {
 	u32		enabled;
 	u16		mesh_count;
 	u16		mesh_id;
-	u32		field_50;
-	u32		field_54;
-	u32		field_58;
-	u16		field_5C;
-	u16		field_5E;
-	u16		field_60;
+	VecFx32		scale;
+	fx16		angle_x;
+	fx16		angle_y;
+	fx16		angle_z;
 	u16		field_62;
-	u32		field_64;
-	u32		field_68;
-	u32		field_6C;
+	VecFx32		pos;
 	u32		field_70;
 	VecFx32		vec1;
 	VecFx32		vec2;
 	u8		type;
 	u8		field_8D;
 	u16		field_8E;
-	MtxFx43		a_matrix;
+	MtxFx43		node_transform;
 	u32		field_C0;
 	u32		field_C4;
 	u32		field_C8;
@@ -183,7 +181,7 @@ typedef struct {
 	u32		materials;
 	u32		dlists;
 	u32		nodes;
-	u16		unk_anim_count;
+	u16		node_anim_count;
 	u8		flags;
 	u8		field_1F;
 	u32		some_node_id;
@@ -227,6 +225,7 @@ PFNGLUSEPROGRAMPROC		glUseProgram;
 PFNGLGETUNIFORMLOCATIONPROC	glGetUniformLocation;
 PFNGLUNIFORM1IPROC		glUniform1i;
 PFNGLUNIFORM4FVPROC		glUniform4fv;
+PFNGLMULTTRANSPOSEMATRIXFPROC	glMultTransposeMatrixf;
 
 static void load_extensions(void)
 {
@@ -247,6 +246,7 @@ static void load_extensions(void)
 	glGetUniformLocation = (PFNGLGETUNIFORMLOCATIONPROC)wglGetProcAddress("glGetUniformLocation");
 	glUniform1i = (PFNGLUNIFORM1IPROC)wglGetProcAddress("glUniform1i");
 	glUniform4fv = (PFNGLUNIFORM4FVPROC)wglGetProcAddress("glUniform4fv");
+	glMultTransposeMatrixf = (PFNGLMULTTRANSPOSEMATRIXFPROC)wglGetProcAddress("glMultTransposeMatrixf");
 }
 #endif
 
@@ -1025,6 +1025,9 @@ CModel* CModel_load(u8* scenedata, unsigned int scenesize, u8* texturedata, unsi
 	if(!scene)
 		fatal("not enough memory");
 
+	scene->animation = NULL;
+	scene->texcoord_animations = NULL;
+
 	HEADER* rawheader = (HEADER*) scenedata;
 
 	scene->scale		= get32bit_LE((u8*)&rawheader->scale) / 4096.0f;
@@ -1036,6 +1039,8 @@ CModel* CModel_load(u8* scenedata, unsigned int scenesize, u8* texturedata, unsi
 	Mesh* meshes		= (Mesh*)	((uintptr_t)scenedata + (uintptr_t)get32bit_LE((u8*)&rawheader->meshes));
 	Texture* textures	= (Texture*)	((uintptr_t)scenedata + (uintptr_t)get32bit_LE((u8*)&rawheader->textures));
 	Palette* palettes	= (Palette*)	((uintptr_t)scenedata + (uintptr_t)get32bit_LE((u8*)&rawheader->palettes));
+	VecFx32* node_pos	= (VecFx32*)	((uintptr_t)scenedata + (uintptr_t)get32bit_LE((u8*)&rawheader->node_pos));
+	VecFx32* node_init_pos	= (VecFx32*)	((uintptr_t)scenedata + (uintptr_t)get32bit_LE((u8*)&rawheader->node_initial_pos));
 
 	scene->num_textures	= get16bit_LE((u8*)&rawheader->num_textures);
 	scene->num_materials	= get16bit_LE((u8*)&rawheader->num_materials);
@@ -1044,6 +1049,26 @@ CModel* CModel_load(u8* scenedata, unsigned int scenesize, u8* texturedata, unsi
 	scene->materials = (MATERIAL*) malloc(scene->num_materials * sizeof(MATERIAL));
 	scene->textures = (TEXTURE*) malloc(scene->num_textures * sizeof(TEXTURE));
 	scene->nodes = (NODE*) malloc(scene->num_nodes * sizeof(NODE));
+
+	scene->node_pos = NULL;
+	if(rawheader->node_pos) {
+		scene->node_pos = (Vec3*) malloc(scene->num_nodes * sizeof(NODE));
+		for(i = 0; i < scene->num_nodes; i++) {
+			scene->node_pos[i].x = FX_FX32_TO_F32((fx32) get32bit_LE((u8*)&node_pos[i].x));
+			scene->node_pos[i].y = FX_FX32_TO_F32((fx32) get32bit_LE((u8*)&node_pos[i].y));
+			scene->node_pos[i].z = FX_FX32_TO_F32((fx32) get32bit_LE((u8*)&node_pos[i].z));
+		}
+	}
+
+	scene->node_initial_pos = NULL;
+	if(rawheader->node_initial_pos) {
+		scene->node_initial_pos = (Vec3*) malloc(scene->num_nodes * sizeof(NODE));
+		for(i = 0; i < scene->num_nodes; i++) {
+			scene->node_initial_pos[i].x = FX_FX32_TO_F32((fx32) get32bit_LE((u8*)&node_init_pos[i].x));
+			scene->node_initial_pos[i].y = FX_FX32_TO_F32((fx32) get32bit_LE((u8*)&node_init_pos[i].y));
+			scene->node_initial_pos[i].z = FX_FX32_TO_F32((fx32) get32bit_LE((u8*)&node_init_pos[i].z));
+		}
+	}
 
 	for(i = 0; i < scene->num_nodes; i++) {
 		NODE* node = &scene->nodes[i];
@@ -1057,6 +1082,15 @@ CModel* CModel_load(u8* scenedata, unsigned int scenesize, u8* texturedata, unsi
 		node->mesh_id = (s16) get16bit_LE((u8*)&raw->mesh_id);
 		node->enabled = get32bit_LE((u8*)&raw->enabled);
 		node->type = raw->type;
+		node->scale.x = FX_FX32_TO_F32((fx32) get32bit_LE((u8*)&raw->scale.x));
+		node->scale.y = FX_FX32_TO_F32((fx32) get32bit_LE((u8*)&raw->scale.y));
+		node->scale.z = FX_FX32_TO_F32((fx32) get32bit_LE((u8*)&raw->scale.z));
+		node->angle.x = get16bit_LE((u8*)&raw->angle_x) / 65536.0 * 2.0 * M_PI;
+		node->angle.y = get16bit_LE((u8*)&raw->angle_x) / 65536.0 * 2.0 * M_PI;
+		node->angle.z = get16bit_LE((u8*)&raw->angle_x) / 65536.0 * 2.0 * M_PI;
+		node->pos.x = FX_FX32_TO_F32((fx32) get32bit_LE((u8*)&raw->pos.x));
+		node->pos.y = FX_FX32_TO_F32((fx32) get32bit_LE((u8*)&raw->pos.y));
+		node->pos.z = FX_FX32_TO_F32((fx32) get32bit_LE((u8*)&raw->pos.z));
 	}
 
 	scene->room_node_name = get_room_node_name(scene->nodes, scene->num_nodes);
@@ -1154,7 +1188,83 @@ CModel* CModel_load(u8* scenedata, unsigned int scenesize, u8* texturedata, unsi
 		fatal("not enough memory");
 	build_meshes(scene, meshes, dlists, scenedata, scenesize);
 
+	scene->apply_transform = 0;
+	CModel_compute_node_matrices(scene, 0);
+
 	return scene;
+}
+
+void scale_rotate_translate(Mtx44* mtx, float sx, float sy, float sz, float ax, float ay, float az, float x, float y, float z)
+{
+	float sin_ax = sinf(ax);
+	float sin_ay = sinf(ay);
+	float sin_az = sinf(az);
+	float cos_ax = cosf(ax);
+	float cos_ay = cosf(ay);
+	float cos_az = cosf(az);
+
+	float v18 = cos_ax * cos_az;
+	float v19 = cos_ax * sin_az;
+	float v20 = cos_ax * cos_ay;
+
+	float v22 = sin_ax * sin_ay;
+
+	float v17 = v19 * sin_ay;
+
+	mtx->_00 = sx * cos_ay * cos_az;
+	mtx->_01 = sx * cos_ay * sin_az;
+	mtx->_02 = sx * -sin_ay;
+
+	mtx->_10 = sy * ((v22 * cos_az) - v19);
+	mtx->_11 = sy * ((v22 * sin_az) + v18);
+	mtx->_12 = sy * sin_ax * cos_ay;
+
+	mtx->_20 = sz * (v18 * sin_ay + sin_ax * sin_az);
+	mtx->_21 = sz * ((v17 + (v19 * sin_ay)) - (sin_ax * cos_az));
+	mtx->_22 = sz * v20;
+
+	mtx->_30 = x;
+	mtx->_31 = y;
+	mtx->_32 = z;
+
+	mtx->_03 = 0;
+	mtx->_13 = 0;
+	mtx->_23 = 0;
+	mtx->_33 = 1;
+}
+
+void CModel_compute_node_matrices(CModel* model, int start_idx)
+{
+	int idx;
+	Mtx44 transform;
+	NODE* node;
+
+	if(!model->nodes || start_idx == -1)
+		return;
+
+	for(idx = start_idx; idx != -1; idx = node->next) {
+		node = &model->nodes[idx];
+
+		scale_rotate_translate(&transform, node->scale.x, node->scale.y, node->scale.z,
+				node->angle.x, node->angle.y, node->angle.z,
+				node->pos.x, node->pos.y, node->pos.z);
+
+		if(node->parent == -1)
+			MTX44Copy(&transform, &node->node_transform);
+		else
+			MTX44Concat(&transform, &model->nodes[node->parent].node_transform, &node->node_transform);
+
+		if(node->child != -1)
+			CModel_compute_node_matrices(model, node->child);
+
+		if(model->node_pos) {
+			MTX44Identity(&transform);
+			transform._30 = -model->node_initial_pos[idx].x;
+			transform._31 = -model->node_initial_pos[idx].y;
+			transform._32 = -model->node_initial_pos[idx].z;
+			MTX44Concat(&transform, &node->node_transform, &node->node_transform);
+		}
+	}
 }
 
 CModel* CModel_load_file(const char* model, const char* textures, int layer_mask)
@@ -1210,6 +1320,8 @@ void CModel_free(CModel* scene)
 	free(scene->meshes);
 	free(scene->dlists);
 	free(scene->nodes);
+	free(scene->node_pos);
+	free(scene->node_initial_pos);
 	free(scene);
 }
 
@@ -1234,9 +1346,16 @@ void CModel_render_mesh(CModel* scene, int mesh_id, int render_notex)
 		//Convert pixel coords to normalised STs
 		glMatrixMode(GL_TEXTURE);
 		glLoadIdentity();
-		glTranslatef(material->translate_s, material->translate_t, 0.0f);
-		glScalef(1.0f / texture->width, 1.0f / texture->height, 1.0f);
-		glScalef(material->scale_s, material->scale_t, 1.0f);
+
+		if(scene->texcoord_animations && material->texcoord_anim_id != -1) {
+			glScalef(1.0f / texture->width, 1.0f / texture->height, 1.0f);
+			process_texcoord_animation(scene->texcoord_animations, material->texcoord_anim_id, texture->width, texture->height);
+		} else {
+			glTranslatef(material->translate_s, material->translate_t, 0.0f);
+			glScalef(material->scale_s, material->scale_t, 1.0f);
+			glScalef(1.0f / texture->width, 1.0f / texture->height, 1.0f);
+		}
+
 		glUniform1i(use_texture, glIsEnabled(GL_TEXTURE_2D));
 	} else {
 		glBindTexture(GL_TEXTURE_2D, 0);
@@ -1249,8 +1368,8 @@ void CModel_render_mesh(CModel* scene, int mesh_id, int render_notex)
 		float amb[4] = { (float)material->ambient.r / 255.0f, (float)material->ambient.g / 255.0f, (float)material->ambient.b / 255.0f, 1.0f };
 		float diff[4] = { material->diffuse.r / 255.0f, material->diffuse.g / 255.0f, material->diffuse.b / 255.0f, 1.0f };
 		float spec[4] = { material->specular.r / 255.0f, material->specular.g / 255.0f, material->specular.b / 255.0f, 1.0f };
-		if(amb[0] != 0)
-			printf("amb: [%d] %f,%f,%f,%f\n", material->ambient.r, amb[0], amb[1], amb[2], amb[3]);
+		//if(amb[0] != 0)
+		//	printf("amb: [%d] %f,%f,%f,%f\n", material->ambient.r, amb[0], amb[1], amb[2], amb[3]);
 		glEnable(GL_LIGHTING);
 		glMaterialfv(GL_FRONT, GL_AMBIENT, amb);
 		glMaterialfv(GL_FRONT, GL_DIFFUSE, diff);
@@ -1314,6 +1433,13 @@ void CModel_render_all(CModel* scene)
 		NODE* node = &scene->nodes[i];
 		if(node->mesh_count) {
 			int mesh_id = node->mesh_id / 2;
+
+			if(scene->apply_transform) {
+				glMatrixMode(GL_MODELVIEW);
+				glPushMatrix();
+				glMultTransposeMatrixf(node->node_transform.a);
+			}
+
 			for(j = 0; j < node->mesh_count; j++) {
 				int id = mesh_id + j;
 				MESH* mesh = &scene->meshes[id];
@@ -1324,6 +1450,11 @@ void CModel_render_all(CModel* scene)
 
 				CModel_billboard(node);
 				CModel_render_mesh(scene, id, 1);
+			}
+
+			if(scene->apply_transform) {
+				glMatrixMode(GL_MODELVIEW);
+				glPopMatrix();
 			}
 		}
 	}
@@ -1338,6 +1469,13 @@ void CModel_render_all(CModel* scene)
 		NODE* node = &scene->nodes[i];
 		if(node->mesh_count) {
 			int mesh_id = node->mesh_id / 2;
+
+			if(scene->apply_transform) {
+				glMatrixMode(GL_MODELVIEW);
+				glPushMatrix();
+				glMultTransposeMatrixf(node->node_transform.a);
+			}
+
 			for(j = 0; j < node->mesh_count; j++) {
 				int id = mesh_id + j;
 				MESH* mesh = &scene->meshes[id];
@@ -1348,6 +1486,11 @@ void CModel_render_all(CModel* scene)
 
 				CModel_billboard(node);
 				CModel_render_mesh(scene, id, 1);
+			}
+
+			if(scene->apply_transform) {
+				glMatrixMode(GL_MODELVIEW);
+				glPopMatrix();
 			}
 		}
 	}
@@ -1368,8 +1511,20 @@ void CModel_render_node_tree(CModel* scene, int node_idx)
 		NODE* node = &scene->nodes[node_idx];
 		if(node->mesh_count > 0 && node->enabled == 1) {
 			int mesh_id = node->mesh_id / 2;
+
+			if(scene->apply_transform) {
+				glMatrixMode(GL_MODELVIEW);
+				glPushMatrix();
+				glMultTransposeMatrixf(node->node_transform.a);
+			}
+
 			for(i = 0; i < node->mesh_count; i++)
 				CModel_render_mesh(scene, mesh_id + i, 0);
+
+			if(scene->apply_transform) {
+				glMatrixMode(GL_MODELVIEW);
+				glPopMatrix();
+			}
 		}
 		if(node->child != -1)
 			CModel_render_node_tree(scene, node->child);
@@ -1391,6 +1546,13 @@ void CModel_render_all_nodes(CModel* scene)
 		NODE* node = &scene->nodes[i];
 		if(node->mesh_count > 0 && node->enabled == 1) {
 			int mesh_id = node->mesh_id / 2;
+
+			if(scene->apply_transform) {
+				glMatrixMode(GL_MODELVIEW);
+				glPushMatrix();
+				glMultTransposeMatrixf(node->node_transform.a);
+			}
+
 			for(j = 0; j < node->mesh_count; j++) {
 				int id = mesh_id + j;
 				MESH* mesh = &scene->meshes[id];
@@ -1401,6 +1563,11 @@ void CModel_render_all_nodes(CModel* scene)
 
 				CModel_billboard(node);
 				CModel_render_mesh(scene, id, 0);
+			}
+
+			if(scene->apply_transform) {
+				glMatrixMode(GL_MODELVIEW);
+				glPopMatrix();
 			}
 		}
 	}
@@ -1415,6 +1582,13 @@ void CModel_render_all_nodes(CModel* scene)
 		NODE* node = &scene->nodes[i];
 		if(node->mesh_count > 0 && node->enabled == 1) {
 			int mesh_id = node->mesh_id / 2;
+
+			if(scene->apply_transform) {
+				glMatrixMode(GL_MODELVIEW);
+				glPushMatrix();
+				glMultTransposeMatrixf(node->node_transform.a);
+			}
+
 			for(j = 0; j < node->mesh_count; j++) {
 				int id = mesh_id + j;
 				MESH* mesh = &scene->meshes[id];
@@ -1425,6 +1599,11 @@ void CModel_render_all_nodes(CModel* scene)
 
 				CModel_billboard(node);
 				CModel_render_mesh(scene, id, 0);
+			}
+
+			if(scene->apply_transform) {
+				glMatrixMode(GL_MODELVIEW);
+				glPopMatrix();
 			}
 		}
 	}
@@ -1437,6 +1616,13 @@ void CModel_render_all_nodes(CModel* scene)
 		NODE* node = &scene->nodes[i];
 		if(node->mesh_count > 0 && node->enabled == 1) {
 			int mesh_id = node->mesh_id / 2;
+
+			if(scene->apply_transform) {
+				glMatrixMode(GL_MODELVIEW);
+				glPushMatrix();
+				glMultTransposeMatrixf(node->node_transform.a);
+			}
+
 			for(j = 0; j < node->mesh_count; j++) {
 				int id = mesh_id + j;
 				MESH* mesh = &scene->meshes[id];
@@ -1449,6 +1635,11 @@ void CModel_render_all_nodes(CModel* scene)
 				CModel_billboard(node);
 				CModel_render_mesh(scene, id, 0);
 			}
+
+			if(scene->apply_transform) {
+				glMatrixMode(GL_MODELVIEW);
+				glPopMatrix();
+			}
 		}
 	}
 	glDisable(GL_ALPHA_TEST);
@@ -1459,6 +1650,13 @@ void CModel_render_all_nodes(CModel* scene)
 		NODE* node = &scene->nodes[i];
 		if(node->mesh_count > 0 && node->enabled == 1) {
 			int mesh_id = node->mesh_id / 2;
+
+			if(scene->apply_transform) {
+				glMatrixMode(GL_MODELVIEW);
+				glPushMatrix();
+				glMultTransposeMatrixf(node->node_transform.a);
+			}
+
 			for(j = 0; j < node->mesh_count; j++) {
 				int id = mesh_id + j;
 				MESH* mesh = &scene->meshes[id];
@@ -1470,6 +1668,11 @@ void CModel_render_all_nodes(CModel* scene)
 
 				CModel_billboard(node);
 				CModel_render_mesh(scene, id, 0);
+			}
+
+			if(scene->apply_transform) {
+				glMatrixMode(GL_MODELVIEW);
+				glPopMatrix();
 			}
 		}
 	}

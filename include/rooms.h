@@ -29,12 +29,13 @@ typedef struct {
 	VecFx32	light_1_vec;
 	Color4	light_2_color;
 	VecFx32	light_2_vec;
-	char*	internal_name;
+	char*	archive_name;
 	char*	archive;
 	u32	unk21;
 	u32	unk22;
 } RoomDescription;
 
 extern const RoomDescription rooms[NUM_ROOMS];
+extern const VecFx32 room_sizes[NUM_ROOMS];
 
 #endif

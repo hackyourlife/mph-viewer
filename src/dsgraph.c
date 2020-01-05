@@ -13,10 +13,10 @@
 #include "rooms.h"
 #include "room.h"
 #include "entity.h"
+#include "game.h"
 
 #define M_PI		3.14159265358979323846
 
-CRoom* room = NULL;
 long time = 0;
 
 bool texturing = true;
@@ -53,6 +53,8 @@ float pos_z = 0.0f;
 bool key_down_forward = false;
 bool key_down_backward = false;
 bool key_down_speed = false;
+
+bool is_fullscreen = false;
 
 void move_forward(float distance)
 {
@@ -104,6 +106,14 @@ void motion_func(int x, int y)
 void special_func(int key, int x, int y)
 {
 	switch(key) {
+		case GLUT_KEY_F2:
+			if(!is_fullscreen) {
+				glutFullScreen();
+			} else {
+				glutReshapeWindow(512, 512);
+			}
+			is_fullscreen = !is_fullscreen;
+			break;
 		case GLUT_KEY_UP:
 			key_down_forward = true;
 			break;
@@ -224,8 +234,10 @@ void process()
 	if(key_down_backward)
 		move_backward(distance);
 
-	if(animate)
+	if(animate) {
+		CRoom_process(room, dt);
 		CEntity_process_all(dt);
+	}
 
 	time = now;
 }
@@ -253,7 +265,7 @@ void display_func(void)
 
 	glMatrixMode(GL_PROJECTION);
 	glLoadIdentity();
-	gluPerspective(80.0f, aspect, 0.05f, size * room->model->scale);
+	gluPerspective(80.0f, aspect, 0.05f, 2 * size * room->model->scale);
 
 	glMatrixMode(GL_MODELVIEW);
 	glLoadIdentity();
@@ -262,14 +274,7 @@ void display_func(void)
 	glRotatef(360.0f - yrot, 0, 1, 0);
 	glTranslatef(-pos_x, -pos_y, -pos_z);
 
-	glPushMatrix();
-
-	glScalef(room->model->scale, room->model->scale, room->model->scale);
-
 	CRoom_render(room);
-
-	glMatrixMode(GL_MODELVIEW);
-	glPopMatrix();
 	CEntity_render_all();
 
 	glutSwapBuffers();
@@ -384,11 +389,17 @@ int main(int argc, char **argv)
 	printf("Room name: %s\n", rooms[room_id].name);
 	printf("root node: %s\n", rooms[room_id].room_node_name);
 
+	GAMEInit();
 	CModel_init();
 	EntInitialize(28);
-	room = load_room(&rooms[room_id], layer_mask);
+	GAMESetRoom(room_id, layer_mask);
+
+	const char* name = get_current_room_name();
+	if(name)
+		glutSetWindowTitle(name);
 
 	printf("layer mask: 0x%04x\n", room->layer_mask);
+	printf("position: %f,%f,%f\n", FX_FX32_TO_F32(room->pos.x), FX_FX32_TO_F32(room->pos.y), FX_FX32_TO_F32(room->pos.z));
 
 	printf(" - Hold left mouse button to look around\n");
 	printf(" - Up/Down moves around\n");

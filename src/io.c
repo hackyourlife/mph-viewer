@@ -1,6 +1,9 @@
+#include <string.h>
+
 #include "error.h"
 #include "heap.h"
 #include "io.h"
+#include "archive.h"
 
 int LoadFile(void** out, const char* filename)
 {
@@ -25,8 +28,15 @@ int LoadFile(void** out, const char* filename)
 
 int LoadFileFromArchive(void** out, const char* filename)
 {
-	char name[256];
-	sprintf(name, "archives/data/%s", filename);
-	printf("loading file %s from extracted archive\n", filename);
-	return LoadFile(out, name);
+	char name[32];
+	char* file;
+	char* slash = strchr(filename, '/');
+	if(!slash)
+		fatal_error("LoadFileFromArchive: Failed to get archive name from file %s!\n", filename);
+
+	memcpy(name, filename, (int) (slash - filename));
+	name[(int) (slash - filename)] = 0;
+	file = slash + 1;
+
+	return LoadFromArchive(out, name, file);
 }

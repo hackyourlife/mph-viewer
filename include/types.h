@@ -81,6 +81,7 @@ typedef enum {
 typedef s16 fx16;
 typedef s32 fx32;
 typedef s64 fx64;
+typedef s64 fx64c;
 
 #define FX32_SHIFT		12
 #define FX32_INT_SIZE		19
@@ -122,6 +123,18 @@ typedef s64 fx64;
 
 #define FX64_CONST(x)		FX_F32_TO_FX64(x)
 
+// deg must be in fx32/fx16 format
+#define FX_DEG_TO_RAD(deg)	((fx32)((FX64C_TWOPI_360 * (deg) + 0x80000000LL) >> 32))
+#define FX_DEG_TO_IDX(deg)	((u16) ((FX64C_65536_360 * (deg) + 0x80000000000LL) >> 44))
+
+// rad must be in fx32/fx16 format
+#define FX_RAD_TO_DEG(rad)	((fx32)((FX64C_360_TWOPI * (rad) + 0x80000000LL) >> 32))
+#define FX_RAD_TO_IDX(rad)	((u16)((FX64C_65536_TWOPI * (rad) + 0x80000000000LL) >> 44))
+
+#define FX_IDX_TO_RAD(idx)	((fx32)((FX64C_TWOPI_65536 * (idx) + 0x80000LL) >> 20))
+#define FX_IDX_TO_DEG(idx)	((fx32)((FX64C_360_65536 * (idx) + 0x80000LL) >> 20))
+
+#include "fxconst.h"
 
 typedef struct {
 	fx32 x;
@@ -179,6 +192,17 @@ typedef struct {
 	float y;
 	float z;
 } Vec3;
+
+typedef union {
+	struct {
+		float _00, _01, _02, _03;
+		float _10, _11, _12, _13;
+		float _20, _21, _22, _23;
+		float _30, _31, _32, _33;
+	};
+	float m[4][4];
+	float a[16];
+} Mtx44;
 
 #define MKTIME(m, s, frac) ((m) * 3600 + (s) * 60 + (frac))
 #define MKCOLOR(r, g, b) ((r) | (g) << 5 | (b) << 10)

@@ -1,9 +1,11 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <math.h>
 #include <GL/gl.h>
 
 #include "types.h"
 #include "model.h"
+#include "animation.h"
 #include "entity.h"
 #include "os.h"
 #include "heap.h"
@@ -42,6 +44,7 @@ static const char pickup_has_anim[22] = {
 };
 
 static CModel* pickup_models[22] = { 0 };
+static CAnimation* pickup_animations[22] = { 0 };
 
 static void load_pickup(int id)
 {
@@ -56,6 +59,10 @@ static void load_pickup(int id)
 		const char* model_name = pickup_model_names[id];
 		sprintf(filename, "%s_Model.bin", model_name);
 		load_model(&pickup_models[id], filename, 0);
+		if(pickup_has_anim[id]) {
+			sprintf(filename, "%s_Anim.bin", pickup_model_names[id]);
+			load_animation(&pickup_animations[id], filename, pickup_models[id], 0);
+		}
 	}
 }
 

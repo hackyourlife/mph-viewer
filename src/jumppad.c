@@ -3,6 +3,7 @@
 
 #include "types.h"
 #include "model.h"
+#include "animation.h"
 #include "entity.h"
 #include "os.h"
 #include "heap.h"
@@ -17,7 +18,9 @@ static const char* jump_pads[6] = {
 };
 
 static CModel* jump_pad_models[6] = { 0 };
+static CAnimation* jump_pad_anims[6] = { 0 };
 static CModel* jump_pad_beam_model = NULL;
+static CAnimation* jump_pad_beam_animation = NULL;
 
 static CModel* jumppad_load_model(EntityJumpPad* jump_pad)
 {
@@ -27,12 +30,13 @@ static CModel* jumppad_load_model(EntityJumpPad* jump_pad)
 	if(!jump_pad_models[model_id] && jump_pads[model_id]) {
 		sprintf(filename, "models/%s_Model.bin", jump_pads[model_id]);
 		load_model(&jump_pad_models[model_id], filename, 0);
-		// sprintf(&filename, "models/%s_Anim.bin", jump_pads[model_id]);
-		// load_animation(&jump_pad_anims[model_id], &filename, jump_pad_models[model_id], 0);
+		sprintf(filename, "models/%s_Anim.bin", jump_pads[model_id]);
+		load_animation(&jump_pad_anims[model_id], filename, jump_pad_models[model_id], 0);
 	}
 
 	if(!jump_pad_beam_model) {
 		load_model(&jump_pad_beam_model, "models/JumpPad_Beam_Model.bin", 0);
+		load_animation(&jump_pad_beam_animation, "models/JumpPad_Beam_Anim.bin", jump_pad_beam_model, 0);
 	}
 }
 
