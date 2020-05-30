@@ -75,7 +75,6 @@ typedef struct
 	u32		model_id;
 	u32		beam_type;
 	u32		field_8C;
-	u32		field_90;
 } EntityJumpPad;
 
 typedef struct
@@ -97,7 +96,6 @@ typedef struct
 	int		field_38;
 	int		field_3C;
 	int		field_40;
-	int		field_44;
 } EntityItem;
 
 struct CEntity;
