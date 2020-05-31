@@ -86,7 +86,6 @@ static void CItem_dump(CItem* item)
 	printf("field_38=0x%x [%f]\n", item->item->field_38, FX_FX32_TO_F32(item->item->field_38));
 	printf("field_3C=0x%x [%f]\n", item->item->field_3C, FX_FX32_TO_F32(item->item->field_3C));
 	printf("field_40=0x%x [%f]\n", item->item->field_40, FX_FX32_TO_F32(item->item->field_40));
-	printf("field_44=0x%x [%f]\n", item->item->field_44, FX_FX32_TO_F32(item->item->field_44));
 	printf("\n");
 }
 
