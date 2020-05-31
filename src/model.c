@@ -679,6 +679,7 @@ static void make_textures(CModel* scn, Material* materials, unsigned int num_mat
 	u32 m;
 	for(m = 0; m < num_materials; m++) {
 		Material* mat = &materials[m];
+		scn->materials[m].render_mode = mat->render_mode;
 		if(mat->texid == 0xFFFF)
 			continue;
 		if(mat->texid >= num_textures) {
@@ -833,7 +834,6 @@ static void make_textures(CModel* scn, Material* materials, unsigned int num_mat
 				break;
 			}
 		}
-		scn->materials[m].render_mode = mat->render_mode;
 		if(mat->alpha < 31) {
 			scn->materials[m].render_mode = TRANSLUCENT;
 		}
