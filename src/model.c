@@ -1086,8 +1086,8 @@ CModel* CModel_load(u8* scenedata, unsigned int scenesize, u8* texturedata, unsi
 		node->scale.y = FX_FX32_TO_F32((fx32) get32bit_LE((u8*)&raw->scale.y));
 		node->scale.z = FX_FX32_TO_F32((fx32) get32bit_LE((u8*)&raw->scale.z));
 		node->angle.x = get16bit_LE((u8*)&raw->angle_x) / 65536.0 * 2.0 * M_PI;
-		node->angle.y = get16bit_LE((u8*)&raw->angle_x) / 65536.0 * 2.0 * M_PI;
-		node->angle.z = get16bit_LE((u8*)&raw->angle_x) / 65536.0 * 2.0 * M_PI;
+		node->angle.y = get16bit_LE((u8*)&raw->angle_y) / 65536.0 * 2.0 * M_PI;
+		node->angle.z = get16bit_LE((u8*)&raw->angle_z) / 65536.0 * 2.0 * M_PI;
 		node->pos.x = FX_FX32_TO_F32((fx32) get32bit_LE((u8*)&raw->pos.x));
 		node->pos.y = FX_FX32_TO_F32((fx32) get32bit_LE((u8*)&raw->pos.y));
 		node->pos.z = FX_FX32_TO_F32((fx32) get32bit_LE((u8*)&raw->pos.z));
