@@ -56,6 +56,8 @@ bool key_down_speed = false;
 
 bool is_fullscreen = false;
 
+bool fog_disable = false;
+
 void move_forward(float distance)
 {
 	pos_x -= distance * (float)sin_deg(heading) * cos_deg(heading_y) * 0.05f;
@@ -203,6 +205,13 @@ void kb_func(unsigned char key, int x, int y)
 
 		case 'l':	case 'L': {
 			lighting = !lighting;
+			glutPostRedisplay();
+		}
+		break;
+
+		case 'g':	case 'G': {
+			fog_disable = !fog_disable;
+			CModel_setFogDisable(fog_disable);
 			glutPostRedisplay();
 		}
 		break;

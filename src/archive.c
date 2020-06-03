@@ -1,4 +1,5 @@
 #include <string.h>
+#include <strings.h>
 
 #include "error.h"
 #include "heap.h"

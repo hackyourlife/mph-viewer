@@ -5,6 +5,7 @@
 
 #include "endianess.h"
 #include "types.h"
+#include "vec.h"
 #include "error.h"
 #include "fs.h"
 #include "heap.h"
@@ -104,6 +105,11 @@ static void default_process(CEntity* self, float dt)
 	// nothing
 }
 
+static void default_process_class(float dt)
+{
+	// nothing
+}
+
 static void default_render(CEntity* self)
 {
 	// nothing
@@ -120,6 +126,7 @@ EntityClass* EntRegister(int id)
 	EntityClass* ent = &entity_registry[id];
 	ent->construct = default_ctor;
 	ent->process = default_process;
+	ent->process_class = default_process_class;
 	ent->render = default_render;
 	ent->get_position = default_get_position;
 	return ent;
@@ -165,6 +172,8 @@ void CEntity_render(CEntity* entity)
 void CEntity_process_all(float dt)
 {
 	for(int i = 0; i < class_count; i++) {
+		if(entity_registry[i].process_class)
+			entity_registry[i].process_class(dt);
 		for(CEntity* ent = instances[i]; ent; ent = ent->next) {
 			CEntity_process(ent, dt);
 		}
@@ -227,4 +236,34 @@ void CEntity_render_all(void)
 	}
 
 	free_to_heap(tmp);
+}
+
+void get_transform_mtx(Mtx44* mtx, VecFx32* vec1, VecFx32* vec2)
+{
+	VecFx32 up;
+	VecFx32 dir;
+
+	VEC_CrossProduct(vec2, vec1, &up);
+	VEC_Normalize(&up, &up);
+	VEC_CrossProduct(vec1, &up, &dir);
+
+	mtx->m[0][0] = FX_FX32_TO_F32(up.x);
+	mtx->m[0][1] = FX_FX32_TO_F32(up.y);
+	mtx->m[0][2] = FX_FX32_TO_F32(up.z);
+	mtx->m[0][3] = 0;
+
+	mtx->m[1][0] = FX_FX32_TO_F32(dir.x);
+	mtx->m[1][1] = FX_FX32_TO_F32(dir.y);
+	mtx->m[1][2] = FX_FX32_TO_F32(dir.z);
+	mtx->m[1][3] = 0;
+
+	mtx->m[2][0] = FX_FX32_TO_F32(vec1->x);
+	mtx->m[2][1] = FX_FX32_TO_F32(vec1->y);
+	mtx->m[2][2] = FX_FX32_TO_F32(vec1->z);
+	mtx->m[2][3] = 0;
+
+	mtx->m[3][0] = 0;
+	mtx->m[3][1] = 0;
+	mtx->m[3][2] = 0;
+	mtx->m[3][3] = 1;
 }

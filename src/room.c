@@ -91,11 +91,13 @@ void CRoom_setLights(CRoom* room)
 
 void CRoom_render(CRoom* room)
 {
+	float fogcolor[4] = { COLOR_R(room->description->fog_color), COLOR_G(room->description->fog_color), COLOR_B(room->description->fog_color), 1 };
 	glMatrixMode(GL_MODELVIEW);
 	glPushMatrix();
 	glTranslatef(FX_FX32_TO_F32(room->pos.x), FX_FX32_TO_F32(room->pos.y), FX_FX32_TO_F32(room->pos.z));
 	glScalef(room->model->scale, room->model->scale, room->model->scale);
 	CRoom_setLights(room);
+	CModel_setFog(room->description->fog_enable, fogcolor, room->description->fog_offset);
 	CModel_render(room->model);
 	glMatrixMode(GL_MODELVIEW);
 	glPopMatrix();

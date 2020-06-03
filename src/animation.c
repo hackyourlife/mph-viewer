@@ -214,7 +214,6 @@ void load_animation(CAnimation** animation, const char* filename, CModel* model,
 
 	printf("loading animation %s\n", filename);
 	*animation = parse_animation(raw, model);
-	model->apply_transform = 1;
 
 	free_to_heap(raw);
 }
@@ -371,7 +370,7 @@ float animate_texcoord(float* lut, int anim_frame, int t, int length, int frame_
 
 	blend_factor = anim_frame & (t_half | 1);
 	if(blend_factor)
-		result = lut[idx_1] * (1.0 - (blend_factor >> t_half)) + (lut[idx_2] * (float) (blend_factor >> t_half));
+		result = lut[idx_1] * (1 - (blend_factor << 12 >> t_half)) + (lut[idx_2] * (blend_factor << 12 >> t_half));
 	else
 		result = lut[idx_1];
 	return result;

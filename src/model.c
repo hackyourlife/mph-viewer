@@ -199,7 +199,7 @@ typedef struct {
 	u16		num_materials;
 	u16		num_nodes;
 	u32		texture_matrices;
-	u32		node_animation;
+	u32		node_animations;
 	u32		texcoord_animations;
 	u32		material_animations;
 	u32		texture_animations;
@@ -225,6 +225,7 @@ PFNGLUSEPROGRAMPROC		glUseProgram;
 PFNGLGETUNIFORMLOCATIONPROC	glGetUniformLocation;
 PFNGLUNIFORM1IPROC		glUniform1i;
 PFNGLUNIFORM4FVPROC		glUniform4fv;
+PFNGLLOADTRANSPOSEMATRIXFPROC	glLoadTransposeMatrixf;
 PFNGLMULTTRANSPOSEMATRIXFPROC	glMultTransposeMatrixf;
 
 static void load_extensions(void)
@@ -246,6 +247,7 @@ static void load_extensions(void)
 	glGetUniformLocation = (PFNGLGETUNIFORMLOCATIONPROC)wglGetProcAddress("glGetUniformLocation");
 	glUniform1i = (PFNGLUNIFORM1IPROC)wglGetProcAddress("glUniform1i");
 	glUniform4fv = (PFNGLUNIFORM4FVPROC)wglGetProcAddress("glUniform4fv");
+	glLoadTransposeMatrixf = (PFNGLLOADTRANSPOSEMATRIXFPROC)wglGetProcAddress("glLoadTransposeMatrixf");
 	glMultTransposeMatrixf = (PFNGLMULTTRANSPOSEMATRIXFPROC)wglGetProcAddress("glMultTransposeMatrixf");
 }
 #endif
@@ -253,6 +255,7 @@ static void load_extensions(void)
 const char* vertex_shader = "\
 uniform bool is_billboard; \n\
 uniform bool use_light; \n\
+uniform bool fog_enable; \n\
 uniform vec4 light1vec; \n\
 uniform vec4 light1col; \n\
 uniform vec4 light2vec; \n\
@@ -260,9 +263,11 @@ uniform vec4 light2col; \n\
 uniform vec4 diffuse; \n\
 uniform vec4 ambient; \n\
 uniform vec4 specular; \n\
+uniform vec4 fog_color; \n\
 \n\
 varying vec2 texcoord; \n\
 varying vec4 color; \n\
+varying float depth; \n\
 \n\
 void main() \n\
 { \n\
@@ -295,21 +300,38 @@ void main() \n\
 		color = gl_Color; \n\
 	} \n\
 	texcoord = vec2(gl_TextureMatrix[0] * gl_MultiTexCoord0); \n\
+	depth = clamp(length(gl_Position) / 256.0, 0, 1); \n\
 }";
 const char* fragment_shader = "\
 uniform bool is_billboard; \n\
 uniform bool use_texture; \n\
+uniform bool fog_enable; \n\
+uniform vec4 fog_color; \n\
+uniform vec4 ambient; \n\
+uniform int fog_offset; \n\
 uniform sampler2D tex; \n\
 varying vec2 texcoord; \n\
 varying vec4 color; \n\
+varying float depth; \n\
 \n\
 void main() \n\
 { \n\
+	vec4 col; \n\
 	if(use_texture) { \n\
 		vec4 texcolor = texture2D(tex, texcoord); \n\
-		gl_FragColor = color * texcolor; \n\
+		col = color * texcolor; \n\
 	} else  { \n\
-		gl_FragColor = color; \n\
+		col = color; \n\
+	} \n\
+	if(fog_enable) { \n\
+		float density = depth - (1 - float(fog_offset) / 65536.0); \n\
+		if(density < 0) \n\
+			density = 0; \n\
+		gl_FragColor = vec4((col * (1 - density) + fog_color * density).xyz, col.a); \n\
+		// float i = density; \n\
+		// gl_FragColor = vec4(i, i, i, 1); \n\
+	} else { \n\
+		gl_FragColor = col; \n\
 	} \n\
 }";
 
@@ -317,6 +339,7 @@ static GLuint shader;
 static GLuint is_billboard;
 static GLuint use_light;
 static GLuint use_texture;
+static GLuint fog_enable;
 static GLuint light1vec;
 static GLuint light2vec;
 static GLuint light1col;
@@ -324,11 +347,18 @@ static GLuint light2col;
 static GLuint diffuse;
 static GLuint ambient;
 static GLuint specular;
+static GLuint fog_color;
+static GLuint fog_offset;
 
 static float l1v[4];
 static float l1c[4];
 static float l2v[4];
 static float l2c[4];
+
+static bool fogen = false;
+static bool fogdis = false;
+static float fogcol[4];
+static int fogoff;
 
 void CModel_setLights(float l1vec[4], float l1col[4], float l2vec[4], float l2col[4])
 {
@@ -336,6 +366,18 @@ void CModel_setLights(float l1vec[4], float l1col[4], float l2vec[4], float l2co
 	memcpy(l1c, l1col, sizeof(float[4]));
 	memcpy(l2v, l2vec, sizeof(float[4]));
 	memcpy(l2c, l2col, sizeof(float[4]));
+}
+
+void CModel_setFog(bool en, float fogc[4], int fogoffset)
+{
+	fogen = en;
+	memcpy(fogcol, fogc, sizeof(float[4]));
+	fogoff = fogoffset;
+}
+
+void CModel_setFogDisable(bool dis)
+{
+	fogdis = dis;
 }
 
 void CModel_init(void)
@@ -405,6 +447,7 @@ void CModel_init(void)
 	is_billboard = glGetUniformLocation(shader, "is_billboard");
 	use_light = glGetUniformLocation(shader, "use_light");
 	use_texture = glGetUniformLocation(shader, "use_texture");
+	fog_enable = glGetUniformLocation(shader, "fog_enable");
 	light1vec = glGetUniformLocation(shader, "light1vec");
 	light1col = glGetUniformLocation(shader, "light1col");
 	light2vec = glGetUniformLocation(shader, "light2vec");
@@ -412,6 +455,8 @@ void CModel_init(void)
 	diffuse = glGetUniformLocation(shader, "diffuse");
 	ambient = glGetUniformLocation(shader, "ambient");
 	specular = glGetUniformLocation(shader, "specular");
+	fog_color = glGetUniformLocation(shader, "fog_color");
+	fog_offset = glGetUniformLocation(shader, "fog_offset");
 }
 
 static void update_bounds(CModel* scene, float vtx_state[3])
@@ -1026,6 +1071,7 @@ CModel* CModel_load(u8* scenedata, unsigned int scenesize, u8* texturedata, unsi
 		fatal("not enough memory");
 
 	scene->animation = NULL;
+	scene->node_animations = NULL;
 	scene->texcoord_animations = NULL;
 
 	HEADER* rawheader = (HEADER*) scenedata;
@@ -1104,6 +1150,8 @@ CModel* CModel_load(u8* scenedata, unsigned int scenesize, u8* texturedata, unsi
 	if(!scene->materials || !scene->textures)
 		fatal("not enough memory");
 
+	int maxmtx = 0;
+
 	for(i = 0; i < scene->num_materials; i++) {
 		Material* m = &materials[i];
 		m->palid = get16bit_LE((u8*)&m->palid);
@@ -1134,6 +1182,11 @@ CModel* CModel_load(u8* scenedata, unsigned int scenesize, u8* texturedata, unsi
 		// mat->specular.r = (u8) (m->specular.r / (float)0x1F * 255.0);
 		// mat->specular.g = (u8) (m->specular.g / (float)0x1F * 255.0);
 		// mat->specular.b = (u8) (m->specular.b / (float)0x1F * 255.0);
+
+		mat->texgen_mode = get32bit_LE((u8*)&m->texcoord_transform_mode);
+		mat->matrix_id = get32bit_LE((u8*)&m->matrix_id);
+		if(mat->matrix_id > maxmtx)
+			maxmtx = mat->matrix_id;
 
 		unsigned int p = m->palid;
 		if(p == 0xFFFF)
@@ -1188,8 +1241,20 @@ CModel* CModel_load(u8* scenedata, unsigned int scenesize, u8* texturedata, unsi
 		fatal("not enough memory");
 	build_meshes(scene, meshes, dlists, scenedata, scenesize);
 
-	scene->apply_transform = 0;
+	scene->apply_transform = 1;
 	CModel_compute_node_matrices(scene, 0);
+
+	if(rawheader->texture_matrices) {
+		printf("%d texture matrices\n", maxmtx);
+		unsigned int j;
+		MtxFx44* rawmtx = (MtxFx44*) ((uintptr_t)scenedata + (uintptr_t)get32bit_LE((u8*)&rawheader->texture_matrices));
+		scene->texture_matrices = (Mtx44*) alloc_from_heap(maxmtx * sizeof(Mtx44));
+		for(i = 0; i < maxmtx; i++) {
+			for(j = 0; j < 16; j++)
+				scene->texture_matrices[i].a[j] = FX_FX32_TO_F32(rawmtx[i].a[j]);
+		}
+	} else
+		scene->texture_matrices = NULL;
 
 	return scene;
 }
@@ -1350,9 +1415,13 @@ void CModel_render_mesh(CModel* scene, int mesh_id, int render_notex)
 		if(scene->texcoord_animations && material->texcoord_anim_id != -1) {
 			glScalef(1.0f / texture->width, 1.0f / texture->height, 1.0f);
 			process_texcoord_animation(scene->texcoord_animations, material->texcoord_anim_id, texture->width, texture->height);
-		} else {
+		} else if(material->texgen_mode != GX_TEXGEN_NONE && scene->texture_matrices) {
+			glLoadMatrixf(scene->texture_matrices[material->matrix_id].a);
+		} else if(material->texgen_mode) {
 			glTranslatef(material->translate_s, material->translate_t, 0.0f);
 			glScalef(material->scale_s, material->scale_t, 1.0f);
+			glScalef(1.0f / texture->width, 1.0f / texture->height, 1.0f);
+		} else {
 			glScalef(1.0f / texture->width, 1.0f / texture->height, 1.0f);
 		}
 
@@ -1416,6 +1485,9 @@ static void CModel_update_uniforms(void)
 	glUniform4fv(light1col, 1, l1c);
 	glUniform4fv(light2vec, 1, l2v);
 	glUniform4fv(light2col, 1, l2c);
+	glUniform1i(fog_enable, fogen && !fogdis);
+	glUniform4fv(fog_color, 1, fogcol);
+	glUniform1i(fog_offset, fogoff);
 }
 
 void CModel_render_all(CModel* scene)
@@ -1437,7 +1509,7 @@ void CModel_render_all(CModel* scene)
 			if(scene->apply_transform) {
 				glMatrixMode(GL_MODELVIEW);
 				glPushMatrix();
-				glMultTransposeMatrixf(node->node_transform.a);
+				glMultMatrixf(node->node_transform.a);
 			}
 
 			for(j = 0; j < node->mesh_count; j++) {
@@ -1459,12 +1531,11 @@ void CModel_render_all(CModel* scene)
 		}
 	}
 
-	// pass 2: translucent
-	// glGetBooleanv(GL_CULL_FACE, &cull);
-	// glDisable(GL_CULL_FACE);
+	// pass 2: opaque pixels on translucent surfaces
 	glEnable(GL_BLEND);
-	glDepthMask(GL_FALSE);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	glEnable(GL_ALPHA_TEST);
+	glAlphaFunc(GL_GEQUAL, 0.95f);
 	for(i = 0; i < scene->num_nodes; i++) {
 		NODE* node = &scene->nodes[i];
 		if(node->mesh_count) {
@@ -1473,7 +1544,44 @@ void CModel_render_all(CModel* scene)
 			if(scene->apply_transform) {
 				glMatrixMode(GL_MODELVIEW);
 				glPushMatrix();
-				glMultTransposeMatrixf(node->node_transform.a);
+				glMultMatrixf(node->node_transform.a);
+			}
+
+			for(j = 0; j < node->mesh_count; j++) {
+				int id = mesh_id + j;
+				MESH* mesh = &scene->meshes[id];
+				MATERIAL* material = &scene->materials[mesh->matid];
+
+				if(material->render_mode == NORMAL)
+					continue;
+
+				CModel_billboard(node);
+				CModel_render_mesh(scene, id, 1);
+			}
+
+			if(scene->apply_transform) {
+				glMatrixMode(GL_MODELVIEW);
+				glPopMatrix();
+			}
+		}
+	}
+
+	// pass 3: translucent
+	// glGetBooleanv(GL_CULL_FACE, &cull);
+	// glDisable(GL_CULL_FACE);
+	glAlphaFunc(GL_LESS, 0.95f);
+	// glEnable(GL_BLEND);
+	glDepthMask(GL_FALSE);
+	// glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	for(i = 0; i < scene->num_nodes; i++) {
+		NODE* node = &scene->nodes[i];
+		if(node->mesh_count) {
+			int mesh_id = node->mesh_id / 2;
+
+			if(scene->apply_transform) {
+				glMatrixMode(GL_MODELVIEW);
+				glPushMatrix();
+				glMultMatrixf(node->node_transform.a);
 			}
 
 			for(j = 0; j < node->mesh_count; j++) {
@@ -1496,6 +1604,7 @@ void CModel_render_all(CModel* scene)
 	}
 	glDepthMask(GL_TRUE);
 	glDisable(GL_BLEND);
+	glDisable(GL_ALPHA_TEST);
 	// if(cull) {
 	// 	glEnable(GL_CULL_FACE);
 	// }
@@ -1515,7 +1624,7 @@ void CModel_render_node_tree(CModel* scene, int node_idx)
 			if(scene->apply_transform) {
 				glMatrixMode(GL_MODELVIEW);
 				glPushMatrix();
-				glMultTransposeMatrixf(node->node_transform.a);
+				glMultMatrixf(node->node_transform.a);
 			}
 
 			for(i = 0; i < node->mesh_count; i++)
@@ -1550,7 +1659,7 @@ void CModel_render_all_nodes(CModel* scene)
 			if(scene->apply_transform) {
 				glMatrixMode(GL_MODELVIEW);
 				glPushMatrix();
-				glMultTransposeMatrixf(node->node_transform.a);
+				glMultMatrixf(node->node_transform.a);
 			}
 
 			for(j = 0; j < node->mesh_count; j++) {
@@ -1586,7 +1695,7 @@ void CModel_render_all_nodes(CModel* scene)
 			if(scene->apply_transform) {
 				glMatrixMode(GL_MODELVIEW);
 				glPushMatrix();
-				glMultTransposeMatrixf(node->node_transform.a);
+				glMultMatrixf(node->node_transform.a);
 			}
 
 			for(j = 0; j < node->mesh_count; j++) {
@@ -1611,7 +1720,7 @@ void CModel_render_all_nodes(CModel* scene)
 	// pass 3: translucent with alpha test
 	glEnable(GL_ALPHA_TEST);
 	glDepthMask(GL_TRUE);
-	glAlphaFunc(GL_GEQUAL, 0.5f);
+	glAlphaFunc(GL_GEQUAL, 0.25f);
 	for(i = 0; i < scene->num_nodes; i++) {
 		NODE* node = &scene->nodes[i];
 		if(node->mesh_count > 0 && node->enabled == 1) {
@@ -1620,7 +1729,7 @@ void CModel_render_all_nodes(CModel* scene)
 			if(scene->apply_transform) {
 				glMatrixMode(GL_MODELVIEW);
 				glPushMatrix();
-				glMultTransposeMatrixf(node->node_transform.a);
+				glMultMatrixf(node->node_transform.a);
 			}
 
 			for(j = 0; j < node->mesh_count; j++) {
@@ -1654,7 +1763,7 @@ void CModel_render_all_nodes(CModel* scene)
 			if(scene->apply_transform) {
 				glMatrixMode(GL_MODELVIEW);
 				glPushMatrix();
-				glMultTransposeMatrixf(node->node_transform.a);
+				glMultMatrixf(node->node_transform.a);
 			}
 
 			for(j = 0; j < node->mesh_count; j++) {

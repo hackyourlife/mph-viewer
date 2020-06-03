@@ -43,6 +43,10 @@ static const char pickup_has_anim[22] = {
 	0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0
 };
 
+static const u16 item_scan_ids[22] = {
+	9, 0xB, 0xC, 0, 0xA, 0x15, 0xD, 0x17, 0x16, 0x12, 0x14, 0x13, 0x1C, 0xE, 0xF, 0x10, 0x11, 0, 0x18, 0x1CF, 0, 0
+};
+
 static CModel* pickup_models[22] = { 0 };
 static CAnimation* pickup_animations[22] = { 0 };
 
@@ -104,6 +108,7 @@ CEntity* CItem_construct(const char* node_name, EntityData* data)
 
 	load_pickup(item->id);
 	obj->model_id = item->id;
+	obj->base.scan_id = item_scan_ids[item->id];
 
 	obj->pos.x = FX_FX32_TO_F32(item->pos.x);
 	obj->pos.y = FX_FX32_TO_F32(item->pos.y);
@@ -115,6 +120,14 @@ CEntity* CItem_construct(const char* node_name, EntityData* data)
 
 	CItem_dump(obj);
 	return (CEntity*)obj;
+}
+
+void CItem_process_class(float dt)
+{
+	for(int i = 0; i < 22; i++) {
+		if(pickup_animations[i])
+			CAnimation_process(pickup_animations[i], dt);
+	}
 }
 
 void CItem_process(CEntity* obj, float dt)
@@ -172,6 +185,7 @@ void EntItemRegister(void)
 	EntityClass* ent = EntRegister(ITEM);
 	ent->construct = CItem_construct;
 	ent->process = CItem_process;
+	ent->process_class = CItem_process_class;
 	ent->render = CItem_render;
 	ent->get_position = CItem_get_position;
 }

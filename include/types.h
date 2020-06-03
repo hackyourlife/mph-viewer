@@ -123,6 +123,25 @@ typedef s64 fx64c;
 
 #define FX64_CONST(x)		FX_F32_TO_FX64(x)
 
+#define FX64C_SHIFT		32
+#define FX64C_INT_SIZE		31
+#define FX64C_DEC_SIZE		32
+
+#define FX64C_INT_MASK		((fx64c)0x7fffffff00000000)
+#define FX64C_DEC_MASK		((fx64c)0x00000000ffffffff)
+#define FX64C_SIGN_MASK		((fx64c)0x8000000000000000)
+
+#define FX64C_MAX		((fx64c)0x7fffffffffffffff)
+#define FX64C_MIN		((fx64c)0x8000000000000000)
+
+#define FX_FX64C_TO_F32(x)	((f32)((x) / (f32)((fx64c)1 << FX64C_SHIFT)))
+#define FX_F32_TO_FX64C(x)	((fx64c)(((x) > 0) ? \
+					((x) * ((fx64c)1 << FX64C_SHIFT) + 0.5f ) : \
+					((x) * ((fx64c)1 << FX64C_SHIFT) - 0.5f )))
+
+#define FX64C_CONST(x)		FX_F32_TO_FX64C(x)
+
+
 // deg must be in fx32/fx16 format
 #define FX_DEG_TO_RAD(deg)	((fx32)((FX64C_TWOPI_360 * (deg) + 0x80000000LL) >> 32))
 #define FX_DEG_TO_IDX(deg)	((u16) ((FX64C_65536_360 * (deg) + 0x80000000000LL) >> 44))
@@ -141,6 +160,16 @@ typedef struct {
 	fx32 y;
 	fx32 z;
 } VecFx32;
+
+typedef union {
+	struct {
+		fx32 _00, _01, _02;
+		fx32 _10, _11, _12;
+		fx32 _20, _21, _22;
+	};
+	fx32 m[3][3];
+	fx32 a[9];
+} MtxFx33;
 
 typedef union {
 	struct {
@@ -207,5 +236,9 @@ typedef union {
 #define MKTIME(m, s, frac) ((m) * 3600 + (s) * 60 + (frac))
 #define MKCOLOR(r, g, b) ((r) | (g) << 5 | (b) << 10)
 #define VECFX32(x, y, z) { FX32_CONST(x), FX32_CONST(y), FX32_CONST(z) }
+
+#define	COLOR_R(rgb565)	(((rgb565) & 0x1F) / (f32) 0x1F)
+#define	COLOR_G(rgb565)	((((rgb565) >> 5) & 0x1F) / (f32) 0x1F)
+#define	COLOR_B(rgb565)	((((rgb565) >> 10) & 0x1F) / (f32) 0x1F)
 
 #endif

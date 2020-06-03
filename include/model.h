@@ -76,6 +76,8 @@ typedef struct {
 	Color3				ambient;
 	Color3				specular;
 	int				texcoord_anim_id;
+	GXTexGen			texgen_mode;
+	int				matrix_id;
 } MATERIAL;
 
 typedef struct {
@@ -119,6 +121,7 @@ typedef struct {
 	float				scale;
 	Vec3*				node_pos;
 	Vec3*				node_initial_pos;
+	Mtx44*				texture_matrices;
 
 	bool				apply_transform;
 
@@ -132,11 +135,14 @@ typedef struct {
 	int				room_node_id;
 
 	CAnimation*			animation;
+	void*				node_animations;
 	CTexcoordAnimationGroup*	texcoord_animations;
 } CModel;
 
 void	CModel_init(void);
 void	CModel_setLights(float l1vec[4], float l1col[4], float l2vec[4], float l2col[4]);
+void	CModel_setFog(bool en, float fogc[4], int fogoffset);
+void	CModel_setFogDisable(bool dis);
 void	load_model(CModel** model, const char* filename, int flags);
 void	load_room_model(CModel** model, const char* filename, const char* txtrfilename, int flags, int layer_mask);
 CModel*	CModel_load(u8* scenedata, unsigned int scenesize, u8* texturedata, unsigned int texturesize, int layer_mask);

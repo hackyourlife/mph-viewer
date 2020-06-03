@@ -2,26 +2,16 @@
 #include "utils.h"
 
 #ifdef __linux__
-
-
-#include <string.h>
-
-char* strrev(char* str)
+char* strrev(char* s)
 {
-	if(!str || ! *str)
-		return str;
-
-	int i = strlen(str) - 1, j = 0;
-
-	char ch;
-	while(i > j) {
-		ch = str[i];
-		str[i] = str[j];
-		str[j] = ch;
-		i--;
-		j++;
+	size_t i, j;
+	size_t len = strlen(s);
+	for(i = 0, j = len - 1; i < j; i++, j--) {
+		char x = s[i];
+		s[i] = s[j];
+		s[j] = x;
 	}
-	return str;
+	return s;
 }
 #endif
 

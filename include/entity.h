@@ -45,8 +45,8 @@ typedef struct
 	EntityData	header;
 
 	VecFx32		pos;
-	VecFx32		vec2;
-	VecFx32		vec3;
+	VecFx32		base_vec1;
+	VecFx32		base_vec2;
 	u32		field_24;
 	u32		field_28;
 	u32		field_2C;
@@ -65,8 +65,8 @@ typedef struct
 	u32		field_60;
 	u32		field_64;
 	u32		field_68;
-	VecFx32		vec4;
-	u32		field_78;
+	VecFx32		beam_vec;
+	fx32		speed;
 	s16		field_7C;
 	u16		field_7E;
 	u8		field_80;
@@ -105,12 +105,14 @@ typedef struct
 {
 	CEntity*	(*construct)(const char* node_name, EntityData* data);
 	void		(*process)(CEntity* self, float dt);
+	void		(*process_class)(float dt);
 	void		(*render)(CEntity* self);
 	Vec3*		(*get_position)(CEntity* self);
 } EntityClass;
 
 struct CEntity {
 	u16		type;
+	u16		scan_id;
 	EntityClass*	funcs;
 	CEntity*	next;
 };
@@ -120,8 +122,11 @@ typedef struct
 	CEntity		base;
 	EntityJumpPad*	pad;
 	Vec3		pos;
+	Vec3		beam_vec;
 	int		model_id;
 	int		beam_id;
+	Mtx44		base_mtx;
+	Mtx44		beam_mtx;
 } CJumpPad;
 
 typedef struct {
@@ -146,5 +151,7 @@ void		CEntity_render_all(void);
 void		EntJumpPadRegister(void);
 void		EntItemRegister(void);
 void		EntDelayedItemRegister(void);
+
+void		get_transform_mtx(Mtx44* mtx, VecFx32* vec1, VecFx32* vec2);
 
 #endif

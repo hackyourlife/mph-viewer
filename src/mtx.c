@@ -57,3 +57,14 @@ void MTX44Concat(const Mtx44* a, const Mtx44* b, Mtx44* ab)
 	if(m == &tmp)
 		MTX44Copy(&tmp, ab);
 }
+
+void MTX44MultVec33(const VecFx32* vec, const Mtx44* m, Vec3* dst)
+{
+	float x = FX_FX32_TO_F32(vec->x);
+	float y = FX_FX32_TO_F32(vec->y);
+	float z = FX_FX32_TO_F32(vec->z);
+
+	dst->x = x * m->_00 + y * m->_10 + z * m->_20;
+	dst->y = x * m->_01 + y * m->_11 + z * m->_21;
+	dst->z = x * m->_02 + y * m->_12 + z * m->_22;
+}
