@@ -1,5 +1,7 @@
 #include <stdio.h>
 #include <string.h>
+#include <GL/gl.h>
+#include <GL/glext.h>
 
 #include "types.h"
 #include "model.h"
@@ -7,6 +9,7 @@
 #include "texture_containers.h"
 #include "entity.h"
 #include "os.h"
+#include "heap.h"
 
 #define NUM_OBJECTS	54
 
@@ -70,6 +73,7 @@ static ObjectDescription objects[NUM_OBJECTS] =
 
 CModel* object_model[NUM_OBJECTS];
 CAnimation* object_anim[NUM_OBJECTS];
+static int loaded[NUM_OBJECTS];
 
 void link_model(CModel* model, SHARED_TEXTURE container_id, int copy_textures)
 {
@@ -90,11 +94,15 @@ void link_model(CModel* model, SHARED_TEXTURE container_id, int copy_textures)
 void load_object(unsigned int id)
 {
 	const char* model_name;
-	CModel* mdl;
 	char filename[64];
+
+	if(loaded[id])
+		return;
+	loaded[id] = 1;
 
 	if(!object_model[id] && objects[id].model_name) {
 		sprintf(filename, "models/%s_Model.bin", objects[id].model_name);
+		printf("Loading model %s\n", filename);
 		load_model(&object_model[id], filename, 0);
 		// if(objects[id].unk_flag)
 		// 	object_model[id]->flags |= 1u;
@@ -103,42 +111,38 @@ void load_object(unsigned int id)
 				OS_Terminate();
 			load_texture_container(object_model[41], ALIMBIC_TXTR);
 		} else if(id >= 0xC && id <= 0x10) {
-			mdl = object_model[id];
-			if(mdl->textures)
+			if(object_model[id]->textures)
 				OS_Terminate();
 			load_texture_container(object_model[id], GENERIC_EQUIP_TXTR);
 		} else if(id >= 0x11 && id <= 0x15) {
-			mdl = object_model[id];
-			if(mdl->textures)
+			if(object_model[id]->textures)
 				OS_Terminate();
 			load_texture_container(object_model[id], ALIMBIC_EQUIP_TXTR);
 		} else if(id >= 0x16 && id <= 0x1A) {
-			mdl = object_model[id];
-			if(mdl->textures)
+			if(object_model[id]->textures)
 				OS_Terminate();
 			load_texture_container(object_model[id], LAVA_EQUIP_TXTR);
 		} else if(id >= 0x1B && id <= 0x1F) {
-			mdl = object_model[id];
-			if(mdl->textures)
+			if(object_model[id]->textures)
 				OS_Terminate();
 			load_texture_container(object_model[id], ICE_EQUIP_TXTR);
 		} else if(id >= 0x20 && id <= 0x24) {
-			mdl = object_model[id];
-			if(mdl->textures)
+			if(object_model[id]->textures)
 				OS_Terminate();
 			load_texture_container(object_model[id], RUINS_EQUIP_TXTR);
 		} else if(id >= 0x2F && id <= 0x34) {
 			link_model(object_model[id], SECRET_SWITCH_TXTR, 1);
 		} else if(id == 45) {
 			// load_collision(&alimbic_capsule_shield_collision, "models/AlmbCapsuleShld_Collision.bin", 0);
+			object_model[45]->texture_matrices = (Mtx44*) alloc_from_heap(sizeof(Mtx44));
 			object_model[45]->texture_matrices->m[0][0] = 0;
 			object_model[45]->texture_matrices->m[0][1] = 0;
 			object_model[45]->texture_matrices->m[0][2] = 0;
-			object_model[45]->texture_matrices->m[1][0] = -2048;
+			object_model[45]->texture_matrices->m[1][0] = -0.5; // FX_FX32_TO_F32(-2048);
 			object_model[45]->texture_matrices->m[1][1] = 0;
 			object_model[45]->texture_matrices->m[1][2] = 0;
-			object_model[45]->texture_matrices->m[2][0] = 410;
-			object_model[45]->texture_matrices->m[2][1] = -3891;
+			object_model[45]->texture_matrices->m[2][0] = 0.1;  // FX_FX32_TO_F32(410);
+			object_model[45]->texture_matrices->m[2][1] = -0.95; // FX_FX32_TO_F32(-3891);
 			object_model[45]->texture_matrices->m[2][2] = 0;
 			object_model[45]->texture_matrices->m[3][0] = 0;
 			object_model[45]->texture_matrices->m[3][1] = 0;
@@ -160,4 +164,92 @@ void load_object(unsigned int id)
 			}
 		}
 	}
+}
+
+CEntity* CObject_construct(const char* node_name, EntityData* data)
+{
+	if(data->type != OBJECT) {
+		OS_Terminate();
+	}
+
+	EntityObject* ent = (EntityObject*)data;
+
+	printf("Object: id=%d\n", ent->object_id);
+
+	CObject* obj = (CObject*)alloc_from_heap(sizeof(CObject));
+	CEntityCtor(&obj->base, data);
+
+	obj->object_id = ent->object_id;
+
+	if(obj->object_id == 0)
+		obj->object_id = -1;
+
+	if(obj->object_id != -1)
+		load_object(ent->object_id);
+
+	obj->pos.x = FX_FX32_TO_F32(ent->pos.x);
+	obj->pos.y = FX_FX32_TO_F32(ent->pos.y);
+	obj->pos.z = FX_FX32_TO_F32(ent->pos.z);
+
+	get_transform_mtx(&obj->transform, &ent->vec2, &ent->vec1);
+	obj->transform.m[3][0] = obj->pos.x;
+	obj->transform.m[3][1] = obj->pos.y;
+	obj->transform.m[3][2] = obj->pos.z;
+
+	return (CEntity*)obj;
+}
+
+void CObject_process_class(float dt)
+{
+	for(int i = 0; i < NUM_OBJECTS; i++) {
+		if(object_anim[i])
+			CAnimation_process(object_anim[i], dt);
+	}
+}
+
+void CObject_render(CEntity* obj)
+{
+	CObject* self = (CObject*)obj;
+
+	if(self->object_id == -1)
+		return;
+
+	glMatrixMode(GL_MODELVIEW);
+	glPushMatrix();
+	glMultMatrixf(self->transform.a);
+
+	CModel_render_all(object_model[self->object_id]);
+
+	glMatrixMode(GL_MODELVIEW);
+	glPopMatrix();
+}
+
+Vec3* CObject_get_position(CEntity* obj)
+{
+	CObject* self = (CObject*)obj;
+
+	return &self->pos;
+}
+
+void CObject_set_tex_filter(int type)
+{
+	unsigned int i;
+	for(i = 0; i < NUM_OBJECTS; i++) {
+		if(object_model[i])
+			CModel_set_texture_filter(object_model[i], type);
+	}
+}
+
+void EntObjectRegister(void)
+{
+	EntityClass* ent = EntRegister(OBJECT);
+	ent->construct = CObject_construct;
+	ent->process_class = CObject_process_class;
+	ent->render = CObject_render;
+	ent->get_position = CObject_get_position;
+	ent->set_tex_filter = CObject_set_tex_filter;
+
+	memset(object_model, 0, sizeof(object_model));
+	memset(object_anim, 0, sizeof(object_anim));
+	memset(loaded, 0, sizeof(loaded));
 }

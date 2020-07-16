@@ -4,15 +4,18 @@
 enum ENTITY_TYPE {
 	PLATFORM = 0x0,
 	OBJECT = 0x1,
+	SPAWN_POINT = 0x2,
 	ALIMBIC_DOOR = 0x3,
 	ITEM = 0x4,
-	PICKUP = 0x6,
+	ITEM_INSTANCE = 0x5,
+	ENEMY = 0x6,
 	JUMP_PAD = 0x9,
 	TELEPORTER = 0xE,
 	ARTIFACT = 0x11,
 	CAMERA_SEQ = 0x12,
 	FORCE_FIELD = 0x13,
-	ENERGY_BEAM = 0x1A,
+	ENEMY_INSTANCE = 0x17,
+	ENERGY_BEAM = 0x1A
 };
 
 typedef struct
@@ -98,6 +101,20 @@ typedef struct
 	int		field_40;
 } EntityItem;
 
+typedef struct
+{
+	EntityData	header;
+
+	VecFx32		pos;
+	VecFx32		vec1;
+	VecFx32		vec2;
+	u32		flags;
+	u32		fx_flags;
+	u32		object_id;
+	u32		linked_entity;
+	u32		scan_id;
+} EntityObject;
+
 struct CEntity;
 typedef struct CEntity CEntity;
 
@@ -108,6 +125,7 @@ typedef struct
 	void		(*process_class)(float dt);
 	void		(*render)(CEntity* self);
 	Vec3*		(*get_position)(CEntity* self);
+	void		(*set_tex_filter)(int type);
 } EntityClass;
 
 struct CEntity {
@@ -137,6 +155,14 @@ typedef struct {
 	float		rotation;
 } CItem;
 
+typedef struct {
+	CEntity		base;
+	EntityObject*	obj;
+	int		object_id;
+	Vec3		pos;
+	Mtx44		transform;
+} CObject;
+
 extern Entity* entities;
 
 void		EntLoad(Entity** ent, const char* filename, int layer_id);
@@ -144,13 +170,15 @@ void		EntInitialize(int size);
 EntityClass*	EntRegister(int id);
 void		CEntityCtor(CEntity* entity, EntityData* data);
 
+void		EntSetTextureFilter(int type);
+
 void		CEntity_initialize(Entity* entities, NODE* node);
 void		CEntity_process_all(float dt);
 void		CEntity_render_all(void);
 
 void		EntJumpPadRegister(void);
 void		EntItemRegister(void);
-void		EntDelayedItemRegister(void);
+void		EntObjectRegister(void);
 
 void		get_transform_mtx(Mtx44* mtx, VecFx32* vec1, VecFx32* vec2);
 

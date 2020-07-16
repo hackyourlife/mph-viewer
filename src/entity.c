@@ -85,7 +85,7 @@ void EntInitialize(int size)
 
 	EntJumpPadRegister();
 	EntItemRegister();
-	EntDelayedItemRegister();
+	EntObjectRegister();
 }
 
 void CEntityCtor(CEntity* entity, EntityData* data)
@@ -115,6 +115,11 @@ static void default_render(CEntity* self)
 	// nothing
 }
 
+static void default_set_tex_filter(int type)
+{
+	// nothing
+}
+
 static Vec3 pos0 = { 0, 0, 0 };
 static Vec3* default_get_position(CEntity* self)
 {
@@ -129,6 +134,7 @@ EntityClass* EntRegister(int id)
 	ent->process_class = default_process_class;
 	ent->render = default_render;
 	ent->get_position = default_get_position;
+	ent->set_tex_filter = default_set_tex_filter;
 	return ent;
 }
 
@@ -177,6 +183,14 @@ void CEntity_process_all(float dt)
 		for(CEntity* ent = instances[i]; ent; ent = ent->next) {
 			CEntity_process(ent, dt);
 		}
+	}
+}
+
+void EntSetTextureFilter(int type)
+{
+	for(int i = 0; i < class_count; i++) {
+		if(entity_registry[i].set_tex_filter)
+			entity_registry[i].set_tex_filter(type);
 	}
 }
 

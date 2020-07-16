@@ -1,11 +1,13 @@
+#include <stdio.h>
+
 #include "os.h"
 #include "texture_containers.h"
 
 const char* texture_container_names[NUM_TEXTURE_CONTAINERS] = {
-		"models/AlimbicTextureShare_img_Model.bin"
-		"models/TeleporterTextureShare_img_Model.bin"
-		"models/ArtifactTextureShare_img_Model.bin"
-		"models/AlimbicEquipTextureShare_img_Model.bin"
+		"models/AlimbicTextureShare_img_Model.bin",
+		"models/TeleporterTextureShare_img_Model.bin",
+		"models/ArtifactTextureShare_img_Model.bin",
+		"models/AlimbicEquipTextureShare_img_Model.bin",
 		"models/IceEquipTextureShare_img_Model.bin",
 		"models/LavaEquipTextureShare_img_Model.bin",
 		"models/RuinsEquipTextureShare_img_Model.bin",
@@ -31,11 +33,12 @@ const char* texture_container_names[NUM_TEXTURE_CONTAINERS] = {
 		"models/SecretSwitch_Model.bin"
 };
 
-CModel* texture_containers[NUM_TEXTURE_CONTAINERS];
+CModel* texture_containers[NUM_TEXTURE_CONTAINERS] = { 0 };
 
 void load_texture_container(CModel* model, SHARED_TEXTURE id)
 {
 	if(!texture_containers[id]) {
+		printf("Loading texture container %s\n", texture_container_names[id]);
 		load_model(&texture_containers[id], texture_container_names[id], 0);
 		if(texture_containers[id]->dlists)
 			OS_Terminate();
@@ -43,4 +46,9 @@ void load_texture_container(CModel* model, SHARED_TEXTURE id)
 
 	model->num_textures = texture_containers[id]->num_textures;
 	model->textures = texture_containers[id]->textures;
+
+	model->num_palettes = texture_containers[id]->num_palettes;
+	model->palettes = texture_containers[id]->palettes;
+
+	CModel_set_textures(model);
 }

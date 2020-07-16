@@ -6,6 +6,8 @@
 #include "animation.h"
 #include "rooms.h"
 
+typedef struct NodeRef NodeRef;
+
 typedef struct {
 	char			name[32];
 	int			layer_mask;
@@ -14,7 +16,13 @@ typedef struct {
 	CModel*			model;
 	CAnimation*		animation;
 	const RoomDescription*	description;
+	NodeRef*		room_nodes;
 } CRoom;
+
+struct NodeRef {
+	int			node_id;
+	NodeRef*		next;
+};
 
 CRoom*	load_room(const RoomDescription* descr, fx32 x, fx32 y, fx32 z, int layer_mask);
 void	CRoom_render(CRoom* room);

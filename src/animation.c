@@ -384,13 +384,12 @@ float interpolate(float* values, int frame, int speed, int length, int frame_cou
 	if(speed == 1)
 		return values[frame];
 
-	printf("unicorns!\n");
 	int v7 = (frame - 1) >> (speed / 2) << (speed / 2);
 	if(frame >= v7)
 		return values[frame - v7 + (frame >> (speed / 2))];
 
 	int idx_1 = frame >> (speed / 2);
-	int idx_2 = frame >> (speed / 2) + 1;
+	int idx_2 = (frame >> (speed / 2)) + 1;
 
 	float div = 1 << (speed / 2);
 	int t = frame & ((speed / 2) | 1);
@@ -418,7 +417,7 @@ void process_texcoord_animation(CTexcoordAnimationGroup* group, int id, int widt
 	glTranslatef(translate_s * width, translate_t * height, 0);
 	if(rot != 0) {
 		glTranslatef(width / 2, height / 2, 0);
-		glRotatef(-rot / M_PI * 180.0 , 0, 0, 1);
+		glRotatef(rot / M_PI * 180.0 , 0, 0, 1);
 		glTranslatef(-width / 2, -height / 2, 0);
 	}
 	glScalef(scale_s, scale_t, 1);

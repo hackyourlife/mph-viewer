@@ -39,16 +39,16 @@ static const char* pickup_model_names[NUM_PICKUP_MODELS] = {
 		"models/pick_wpn_all"
 };
 
-static const char pickup_has_anim[22] = {
+static const char pickup_has_anim[NUM_PICKUP_MODELS] = {
 	0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0
 };
 
-static const u16 item_scan_ids[22] = {
+static const u16 item_scan_ids[NUM_PICKUP_MODELS] = {
 	9, 0xB, 0xC, 0, 0xA, 0x15, 0xD, 0x17, 0x16, 0x12, 0x14, 0x13, 0x1C, 0xE, 0xF, 0x10, 0x11, 0, 0x18, 0x1CF, 0, 0
 };
 
-static CModel* pickup_models[22] = { 0 };
-static CAnimation* pickup_animations[22] = { 0 };
+static CModel* pickup_models[NUM_PICKUP_MODELS] = { 0 };
+static CAnimation* pickup_animations[NUM_PICKUP_MODELS] = { 0 };
 
 static void load_pickup(int id)
 {
@@ -124,7 +124,7 @@ CEntity* CItem_construct(const char* node_name, EntityData* data)
 
 void CItem_process_class(float dt)
 {
-	for(int i = 0; i < 22; i++) {
+	for(int i = 0; i < NUM_PICKUP_MODELS; i++) {
 		if(pickup_animations[i])
 			CAnimation_process(pickup_animations[i], dt);
 	}
@@ -180,6 +180,16 @@ Vec3* CItem_get_position(CEntity* obj)
 	return &self->pos;
 }
 
+void CItem_set_tex_filter(int type)
+{
+	unsigned int i;
+	for(i = 0; i < 22; i++) {
+		if(pickup_models[i]) {
+			CModel_set_texture_filter(pickup_models[i], type);
+		}
+	}
+}
+
 void EntItemRegister(void)
 {
 	EntityClass* ent = EntRegister(ITEM);
@@ -188,54 +198,5 @@ void EntItemRegister(void)
 	ent->process_class = CItem_process_class;
 	ent->render = CItem_render;
 	ent->get_position = CItem_get_position;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// delayed items
-////////////////////////////////////////////////////////////////////////////////
-CEntity* CDelayedItem_construct(const char* node_name, EntityData* data)
-{
-	if(data->type != PICKUP) {
-		OS_Terminate();
-	}
-
-	EntityItem* item = (EntityItem*)data;
-
-	printf("Delayed item: %d [%s]\n", data->type, NULL); // pickup_model_names[item->id]);
-
-	CItem* obj = (CItem*)alloc_from_heap(sizeof(CItem));
-	CEntityCtor(&obj->base, data);
-
-	//load_pickup(item->id);
-	//obj->model_id = item->id;
-
-	obj->pos.x = FX_FX32_TO_F32(item->pos.x);
-	obj->pos.y = FX_FX32_TO_F32(item->pos.y);
-	obj->pos.z = FX_FX32_TO_F32(item->pos.z);
-
-	return (CEntity*)obj;
-}
-
-void CDelayedItem_render(CEntity* obj)
-{
-	CItem* self = (CItem*)obj;
-
-	glMatrixMode(GL_MODELVIEW);
-	glPushMatrix();
-	glTranslatef(self->pos.x, self->pos.y, self->pos.z);
-
-	glRotatef(360.0f - yrot, 0, -1, 0);
-	glRotatef(xrot, -1, 0, 0);
-
-	// CModel_render(pickup_models[self->model_id]);
-
-	glMatrixMode(GL_MODELVIEW);
-	glPopMatrix();
-}
-
-void EntDelayedItemRegister(void)
-{
-	EntityClass* ent = EntRegister(PICKUP);
-	ent->construct = CDelayedItem_construct;
-	ent->render = CDelayedItem_render;
+	// ent->set_tex_filter = CItem_set_tex_filter;
 }
