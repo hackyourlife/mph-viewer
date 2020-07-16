@@ -105,7 +105,7 @@ typedef struct {
 typedef struct {
 	u32		start_ofs;
 	u32		size;
-	s32		bounds[3][2];
+	s32		bounds[2][3];
 } Dlist;
 
 typedef struct {
@@ -189,7 +189,7 @@ typedef struct {
 	u16		num_textures;
 	u16		field_2A;
 	u32		textures;
-	u16		palette_count;
+	u16		num_palettes;
 	u16		field_32;
 	u32		palettes;
 	u32		some_anim_counts;
@@ -204,7 +204,7 @@ typedef struct {
 	u32		material_animations;
 	u32		texture_animations;
 	u16		num_meshes;
-	u16		num_matrices;
+	u16		num_texture_matrices;
 } __attribute__((__packed__)) HEADER;
 
 #ifdef _WIN32
@@ -224,6 +224,7 @@ PFNGLDELETEPROGRAMPROC		glDeleteProgram;
 PFNGLUSEPROGRAMPROC		glUseProgram;
 PFNGLGETUNIFORMLOCATIONPROC	glGetUniformLocation;
 PFNGLUNIFORM1IPROC		glUniform1i;
+PFNGLUNIFORM1FPROC		glUniform1f;
 PFNGLUNIFORM4FVPROC		glUniform4fv;
 PFNGLLOADTRANSPOSEMATRIXFPROC	glLoadTransposeMatrixf;
 PFNGLMULTTRANSPOSEMATRIXFPROC	glMultTransposeMatrixf;
@@ -246,6 +247,7 @@ static void load_extensions(void)
 	glUseProgram = (PFNGLUSEPROGRAMPROC)wglGetProcAddress("glUseProgram");
 	glGetUniformLocation = (PFNGLGETUNIFORMLOCATIONPROC)wglGetProcAddress("glGetUniformLocation");
 	glUniform1i = (PFNGLUNIFORM1IPROC)wglGetProcAddress("glUniform1i");
+	glUniform1f = (PFNGLUNIFORM1FPROC)wglGetProcAddress("glUniform1f");
 	glUniform4fv = (PFNGLUNIFORM4FVPROC)wglGetProcAddress("glUniform4fv");
 	glLoadTransposeMatrixf = (PFNGLLOADTRANSPOSEMATRIXFPROC)wglGetProcAddress("glLoadTransposeMatrixf");
 	glMultTransposeMatrixf = (PFNGLMULTTRANSPOSEMATRIXFPROC)wglGetProcAddress("glMultTransposeMatrixf");
@@ -264,6 +266,7 @@ uniform vec4 diffuse; \n\
 uniform vec4 ambient; \n\
 uniform vec4 specular; \n\
 uniform vec4 fog_color; \n\
+uniform float far_plane; \n\
 \n\
 varying vec2 texcoord; \n\
 varying vec4 color; \n\
@@ -300,7 +303,7 @@ void main() \n\
 		color = gl_Color; \n\
 	} \n\
 	texcoord = vec2(gl_TextureMatrix[0] * gl_MultiTexCoord0); \n\
-	depth = clamp(length(gl_Position) / 256.0, 0, 1); \n\
+	depth = clamp(gl_Position.z / gl_DepthRange.far * 8.0, 0, 1); \n\
 }";
 const char* fragment_shader = "\
 uniform bool is_billboard; \n\
@@ -309,6 +312,7 @@ uniform bool fog_enable; \n\
 uniform vec4 fog_color; \n\
 uniform vec4 ambient; \n\
 uniform int fog_offset; \n\
+uniform float alpha_scale; \n\
 uniform sampler2D tex; \n\
 varying vec2 texcoord; \n\
 varying vec4 color; \n\
@@ -324,14 +328,17 @@ void main() \n\
 		col = color; \n\
 	} \n\
 	if(fog_enable) { \n\
+		float ndcDepth = (2.0 * gl_FragCoord.z - gl_DepthRange.near - gl_DepthRange.far) / (gl_DepthRange.far - gl_DepthRange.near); \n\
+		float clipDepth = ndcDepth / gl_FragCoord.w; \n\
+		depth = clamp(clipDepth / 128.0, 0, 1); \n\
 		float density = depth - (1 - float(fog_offset) / 65536.0); \n\
 		if(density < 0) \n\
 			density = 0; \n\
-		gl_FragColor = vec4((col * (1 - density) + fog_color * density).xyz, col.a); \n\
+		gl_FragColor = vec4((col * (1 - density) + fog_color * density).xyz, col.a * alpha_scale); \n\
 		// float i = density; \n\
 		// gl_FragColor = vec4(i, i, i, 1); \n\
 	} else { \n\
-		gl_FragColor = col; \n\
+		gl_FragColor = col * vec4(1, 1, 1, alpha_scale); \n\
 	} \n\
 }";
 
@@ -349,6 +356,7 @@ static GLuint ambient;
 static GLuint specular;
 static GLuint fog_color;
 static GLuint fog_offset;
+static GLuint alpha_scale;
 
 static float l1v[4];
 static float l1c[4];
@@ -457,6 +465,7 @@ void CModel_init(void)
 	specular = glGetUniformLocation(shader, "specular");
 	fog_color = glGetUniformLocation(shader, "fog_color");
 	fog_offset = glGetUniformLocation(shader, "fog_offset");
+	alpha_scale = glGetUniformLocation(shader, "alpha_scale");
 }
 
 static void update_bounds(CModel* scene, float vtx_state[3])
@@ -610,7 +619,12 @@ static void do_reg(u32 reg, u32** data_pp, float vtx_state[3], CModel* scene)
 
 		//DIF_AMB
 		case 0x4C0: {
-			u32 val = *(data++);
+			u32 rgb = *(data++);
+			// TODO: implement as DIF_AMB instead of COLOR
+			u32 r = (rgb >>  0) & 0x1F;
+			u32 g = (rgb >>  5) & 0x1F;
+			u32 b = (rgb >> 10) & 0x1F;
+			glColor3f(((float)r) / 31.0f, ((float)g) / 31.0f, ((float)b) / 31.0f);
 		}
 		break;
 
@@ -673,13 +687,13 @@ static void do_dlist(u32* data, u32 len, CModel* scene)
 	}
 }
 
-static void build_meshes(CModel* scene, Mesh* meshes, Dlist* dlists, u8* scenedata, unsigned int scenesize)
+static void build_meshes(CModel* scene, Mesh* meshes, Dlist* dlists, unsigned int mesh_count, void* scenedata)
 {
 	scene->meshes = (MESH*) malloc(scene->num_meshes * sizeof(MESH));
 	if(!scene->meshes)
 		fatal("not enough memory");
 
-	Mesh* end = (Mesh*) (scenedata + scenesize);
+	unsigned int i;
 	Mesh* mesh;
 	MESH* m;
 
@@ -690,7 +704,7 @@ static void build_meshes(CModel* scene, Mesh* meshes, Dlist* dlists, u8* sceneda
 	scene->max_y = -FLT_MAX;
 	scene->max_z = -FLT_MAX;
 
-	for(mesh = meshes, m = scene->meshes; mesh < end; mesh++, m++) {
+	for(i = 0, mesh = meshes, m = scene->meshes; i < mesh_count; mesh++, m++, i++) {
 		Dlist* dlist = &dlists[mesh->dlistid];
 		u32* data = (u32*) (scenedata + dlist->start_ofs);
 		m->matid = mesh->matid;
@@ -719,52 +733,28 @@ static void build_meshes(CModel* scene, Mesh* meshes, Dlist* dlists, u8* sceneda
 	Palette entries are 16bit RGBA
 
 */
-static void make_textures(CModel* scn, Material* materials, unsigned int num_materials, Texture* textures, unsigned int num_textures, Palette* palettes, u8* data, u32 datasize)
+static void make_textures(CModel* model)
 {
 	u32 m;
-	for(m = 0; m < num_materials; m++) {
-		Material* mat = &materials[m];
-		scn->materials[m].render_mode = mat->render_mode;
+	for(m = 0; m < model->num_materials; m++) {
+		MATERIAL* mat = &model->materials[m];
 		if(mat->texid == 0xFFFF)
 			continue;
-		if(mat->texid >= num_textures) {
+		if(mat->texid >= model->num_textures) {
 			printf("invalid texture id %04X for material %d\n", mat->texid, m);
 			continue;
 		}
 
-		Texture* tex = &textures[mat->texid];
-		Palette* pal = &palettes[mat->palid];
+		if(mat->palid != 0xFFFF && !model->palettes)
+			fatal("missing palette");
 
-		u8* texels = (u8*) (data + tex->image_ofs);
-		u16* paxels = (u16*) (data + pal->entries_ofs);
+		TEXTURE* tex = &model->textures[mat->texid];
+		PALETTE* pal = &model->palettes[mat->palid];
 
-		if(tex->image_ofs >= datasize) {
-			printf("invalid texel offset for texture %d in material %d\n", mat->texid, m);
-			continue;
-		}
-		if(pal->entries_ofs >= datasize) {
-			printf("invalid paxel offset for palette %d in material %d\n", mat->palid, m);
-			continue;
-		}
+		u8* texels = tex->data;
+		u16* paxels = pal->data;
 
 		u32 num_pixels = (u32)tex->width * (u32)tex->height;
-
-		u32 texsize = num_pixels;
-		if(tex->format == 0)
-			texsize /= 4;
-		else if(tex->format == 1)
-			texsize /= 2;
-		else if(tex->format == 5)
-			texsize *= 2;
-
-		if((tex->image_ofs + texsize) > datasize) {
-			printf("invalid texture size\n");
-			continue;
-		}
-		//if((pal->entries_ofs + pal->count * 2) > datasize) {
-		//	printf("invalid palette size (%d, %d)\n", pal->entries_ofs, pal->count);
-		//	continue;
-		//}
 
 		u32* image = (u32*) malloc(sizeof(u32) * num_pixels);
 		if(!image)
@@ -816,7 +806,7 @@ static void make_textures(CModel* scn, Material* materials, unsigned int num_mat
 				u32 r = ((col >>  0) & 0x1F) << 3;
 				u32 g = ((col >>  5) & 0x1F) << 3;
 				u32 b = ((col >> 10) & 0x1F) << 3;
-				u32 a = ((entry >> 3) / 31.0 * 255.0) * alpha;
+				u32 a = (tex->opaque ? 0xFF : ((entry >> 3) / 31.0 * 255.0)) * alpha;
 				image[p] = (r << 0) | (g << 8) | (b << 16) | (a << 24);
 			}
 		} else if(tex->format == 5) {			// 16it RGB
@@ -826,7 +816,7 @@ static void make_textures(CModel* scn, Material* materials, unsigned int num_mat
 				u32 r = ((col >> 0) & 0x1F) << 3;
 				u32 g = ((col >> 5) & 0x1F) << 3;
 				u32 b = ((col >> 10) & 0x1F) << 3;
-				u32 a = ((col & 0x8000) ? 0x00 : 0xFF) * alpha;
+				u32 a = (tex->opaque ? 0xFF : ((col & 0x8000) ? 0xFF : 0x00)) * alpha;
 				image[p] = (r << 0) | (g << 8) | (b << 16) | (a << 24);
 			}
 		} else if(tex->format == 6) {			// A3I5
@@ -838,7 +828,7 @@ static void make_textures(CModel* scn, Material* materials, unsigned int num_mat
 				u32 r = ((col >>  0) & 0x1F) << 3;
 				u32 g = ((col >>  5) & 0x1F) << 3;
 				u32 b = ((col >> 10) & 0x1F) << 3;
-				u32 a = ((entry >> 5) / 7.0 * 255.0) * alpha;
+				u32 a = (tex->opaque ? 0xFF : ((entry >> 5) / 7.0 * 255.0)) * alpha;
 				image[p] = (r << 0) | (g << 8) | (b << 16) | (a << 24);
 			}
 		} else {
@@ -880,35 +870,35 @@ static void make_textures(CModel* scn, Material* materials, unsigned int num_mat
 			}
 		}
 		if(mat->alpha < 31) {
-			scn->materials[m].render_mode = TRANSLUCENT;
+			mat->render_mode = TRANSLUCENT;
 		}
-		if(scn->materials[m].render_mode) {
+		if(mat->render_mode != NORMAL) {
 			if(!translucent) {
 				printf("%d [%s]: strange, this should be opaque (alpha: %d, fmt: %d, opaque: %d)\n", m, mat->name, mat->alpha, tex->format, tex->opaque);
-				scn->materials[m].render_mode = NORMAL;
+				mat->render_mode = NORMAL;
 			}
 		} else if(translucent) {
 			// there are translucent pixels, but the material is not marked as translucent
 			// -> we assume that alpha test is used
 			printf("%d [%s]: strange, this should be translucent (alpha: %d, fmt: %d, opaque: %d)\n", m, mat->name, mat->alpha, tex->format, tex->opaque);
-			scn->materials[m].render_mode = ALPHA_TEST;
+			mat->render_mode = ALPHA_TEST;
 		}
 
-		if(scn->materials[m].render_mode == TRANSLUCENT) {
-			if(alpha == 1.0f) {
+		if(mat->render_mode == TRANSLUCENT) {
+			if(mat->alpha == 31) {
 				switch(tex->format) {
 					case 0:
 					case 1:
 					case 2:
 					case 5:
 						printf("%d [%s]: using alpha test\n", m, mat->name);
-						scn->materials[m].render_mode = ALPHA_TEST;
+						mat->render_mode = ALPHA_TEST;
 				}
 			}
 		}
 
-		glGenTextures(1, &scn->materials[m].tex);
-		glBindTexture(GL_TEXTURE_2D, scn->materials[m].tex);
+		glGenTextures(1, &mat->tex);
+		glBindTexture(GL_TEXTURE_2D, mat->tex);
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, tex->width, tex->height, 0, GL_RGBA, GL_UNSIGNED_BYTE, (GLvoid*)image);
 		//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 		//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
@@ -963,7 +953,7 @@ static char* get_room_node_name(NODE* nodes, unsigned int node_cnt)
 	return name;
 }
 
-static int get_node_child(const char* name, CModel* scene)
+int get_node_child(const char* name, CModel* scene)
 {
 	unsigned int i;
 	if(scene->num_nodes <= 0)
@@ -1064,7 +1054,7 @@ void load_room_model(CModel** model, const char* filename, const char* txtrfilen
 
 CModel* CModel_load(u8* scenedata, unsigned int scenesize, u8* texturedata, unsigned int texturesize, int layer_mask)
 {
-	unsigned int i;
+	unsigned int i, j;
 
 	CModel* scene = (CModel*) malloc(sizeof(CModel));
 	if(!scene)
@@ -1076,7 +1066,7 @@ CModel* CModel_load(u8* scenedata, unsigned int scenesize, u8* texturedata, unsi
 
 	HEADER* rawheader = (HEADER*) scenedata;
 
-	scene->scale		= get32bit_LE((u8*)&rawheader->scale) / 4096.0f;
+	scene->scale		= FX_FX32_TO_F32(get32bit_LE((u8*)&rawheader->scale));
 	scene->scale		*= 1 << get32bit_LE((u8*)&rawheader->modelview_mtx_shamt);
 
 	Material* materials	= (Material*)	((uintptr_t)scenedata + (uintptr_t)get32bit_LE((u8*)&rawheader->materials));
@@ -1089,12 +1079,27 @@ CModel* CModel_load(u8* scenedata, unsigned int scenesize, u8* texturedata, unsi
 	VecFx32* node_init_pos	= (VecFx32*)	((uintptr_t)scenedata + (uintptr_t)get32bit_LE((u8*)&rawheader->node_initial_pos));
 
 	scene->num_textures	= get16bit_LE((u8*)&rawheader->num_textures);
+	scene->num_palettes	= get16bit_LE((u8*)&rawheader->num_palettes);
 	scene->num_materials	= get16bit_LE((u8*)&rawheader->num_materials);
 	scene->num_nodes	= get16bit_LE((u8*)&rawheader->num_nodes);
+	scene->num_meshes	= get16bit_LE((u8*)&rawheader->num_meshes);
 
-	scene->materials = (MATERIAL*) malloc(scene->num_materials * sizeof(MATERIAL));
-	scene->textures = (TEXTURE*) malloc(scene->num_textures * sizeof(TEXTURE));
-	scene->nodes = (NODE*) malloc(scene->num_nodes * sizeof(NODE));
+	scene->materials = NULL;
+	if(rawheader->materials) {
+		scene->materials = (MATERIAL*) malloc(scene->num_materials * sizeof(MATERIAL));
+	}
+
+	scene->textures = NULL;
+	if(rawheader->textures) {
+		scene->textures = (TEXTURE*) malloc(scene->num_textures * sizeof(TEXTURE));
+		if(!scene->textures)
+			fatal("not enough memory");
+	}
+
+	scene->nodes = NULL;
+	if(rawheader->nodes) {
+		scene->nodes = (NODE*) malloc(scene->num_nodes * sizeof(NODE));
+	}
 
 	scene->node_pos = NULL;
 	if(rawheader->node_pos) {
@@ -1116,140 +1121,185 @@ CModel* CModel_load(u8* scenedata, unsigned int scenesize, u8* texturedata, unsi
 		}
 	}
 
-	for(i = 0; i < scene->num_nodes; i++) {
-		NODE* node = &scene->nodes[i];
-		Node* raw = &nodes[i];
+	if(rawheader->nodes) {
+		for(i = 0; i < scene->num_nodes; i++) {
+			NODE* node = &scene->nodes[i];
+			Node* raw = &nodes[i];
 
-		strncpy(node->name, raw->name, 64);
-		node->parent = (s16) get16bit_LE((u8*)&raw->parent);
-		node->child = (s16) get16bit_LE((u8*)&raw->child);
-		node->next = (s16) get16bit_LE((u8*)&raw->next);
-		node->mesh_count = get16bit_LE((u8*)&raw->mesh_count);
-		node->mesh_id = (s16) get16bit_LE((u8*)&raw->mesh_id);
-		node->enabled = get32bit_LE((u8*)&raw->enabled);
-		node->type = raw->type;
-		node->scale.x = FX_FX32_TO_F32((fx32) get32bit_LE((u8*)&raw->scale.x));
-		node->scale.y = FX_FX32_TO_F32((fx32) get32bit_LE((u8*)&raw->scale.y));
-		node->scale.z = FX_FX32_TO_F32((fx32) get32bit_LE((u8*)&raw->scale.z));
-		node->angle.x = get16bit_LE((u8*)&raw->angle_x) / 65536.0 * 2.0 * M_PI;
-		node->angle.y = get16bit_LE((u8*)&raw->angle_y) / 65536.0 * 2.0 * M_PI;
-		node->angle.z = get16bit_LE((u8*)&raw->angle_z) / 65536.0 * 2.0 * M_PI;
-		node->pos.x = FX_FX32_TO_F32((fx32) get32bit_LE((u8*)&raw->pos.x));
-		node->pos.y = FX_FX32_TO_F32((fx32) get32bit_LE((u8*)&raw->pos.y));
-		node->pos.z = FX_FX32_TO_F32((fx32) get32bit_LE((u8*)&raw->pos.z));
+			strncpy(node->name, raw->name, 64);
+			node->parent = (s16) get16bit_LE((u8*)&raw->parent);
+			node->child = (s16) get16bit_LE((u8*)&raw->child);
+			node->next = (s16) get16bit_LE((u8*)&raw->next);
+			node->mesh_count = get16bit_LE((u8*)&raw->mesh_count);
+			node->mesh_id = (s16) get16bit_LE((u8*)&raw->mesh_id);
+			node->enabled = get32bit_LE((u8*)&raw->enabled);
+			node->type = raw->type;
+			node->scale.x = FX_FX32_TO_F32((fx32) get32bit_LE((u8*)&raw->scale.x));
+			node->scale.y = FX_FX32_TO_F32((fx32) get32bit_LE((u8*)&raw->scale.y));
+			node->scale.z = FX_FX32_TO_F32((fx32) get32bit_LE((u8*)&raw->scale.z));
+			node->angle.x = get16bit_LE((u8*)&raw->angle_x) / 65536.0 * 2.0 * M_PI;
+			node->angle.y = get16bit_LE((u8*)&raw->angle_y) / 65536.0 * 2.0 * M_PI;
+			node->angle.z = get16bit_LE((u8*)&raw->angle_z) / 65536.0 * 2.0 * M_PI;
+			node->pos.x = FX_FX32_TO_F32((fx32) get32bit_LE((u8*)&raw->pos.x));
+			node->pos.y = FX_FX32_TO_F32((fx32) get32bit_LE((u8*)&raw->pos.y));
+			node->pos.z = FX_FX32_TO_F32((fx32) get32bit_LE((u8*)&raw->pos.z));
+		}
+
+		scene->room_node_name = get_room_node_name(scene->nodes, scene->num_nodes);
+		scene->room_node_id = get_node_child(scene->room_node_name, scene);
+
+		CModel_filter_nodes(scene, layer_mask);
+	} else {
+		scene->room_node_name = NULL;
+		scene->room_node_id = -1;
 	}
-
-	scene->room_node_name = get_room_node_name(scene->nodes, scene->num_nodes);
-	scene->room_node_id = get_node_child(scene->room_node_name, scene);
-
-	CModel_filter_nodes(scene, layer_mask);
 
 	printf("scale: %f\n", scene->scale);
-	printf("room node: '%s' (%d)\n", scene->room_node_name, scene->room_node_id);
+	// printf("room node: '%s' (%d)\n", scene->room_node_name, scene->room_node_id);
+	printf("%d materials, %d palettes, %d textures\n", scene->num_materials, scene->num_palettes, scene->num_textures);
 
-	if(!scene->materials || !scene->textures)
+	if(rawheader->materials && !scene->materials)
 		fatal("not enough memory");
 
-	int maxmtx = 0;
+	if(rawheader->materials) {
+		for(i = 0; i < scene->num_materials; i++) {
+			Material* m = &materials[i];
+			m->palid = get16bit_LE((u8*)&m->palid);
+			m->texid = get16bit_LE((u8*)&m->texid);
 
-	for(i = 0; i < scene->num_materials; i++) {
-		Material* m = &materials[i];
-		m->palid = get16bit_LE((u8*)&m->palid);
-		m->texid = get16bit_LE((u8*)&m->texid);
+			MATERIAL* mat = &scene->materials[i];
+			strcpy(mat->name, m->name);
+			mat->render_mode = m->render_mode;
+			if(mat->render_mode > 2)
+				mat->render_mode = NORMAL;
+			mat->texid = m->texid;
+			mat->light = m->light;
+			mat->culling = m->culling;
+			mat->alpha = m->alpha;
+			mat->x_repeat = m->x_repeat;
+			mat->y_repeat = m->y_repeat;
+			mat->polygon_mode = get32bit_LE((u8*)&m->polygon_mode);
+			mat->scale_s = FX_FX32_TO_F32(get32bit_LE((u8*)&m->scale_s));
+			mat->scale_t = FX_FX32_TO_F32(get32bit_LE((u8*)&m->scale_t));
+			mat->translate_s = FX_FX32_TO_F32(get32bit_LE((u8*)&m->translate_s));
+			mat->translate_t = FX_FX32_TO_F32(get32bit_LE((u8*)&m->translate_t));
+			mat->diffuse = m->diffuse;
+			mat->ambient = m->ambient;
+			mat->specular = m->specular;
+			// mat->diffuse.r = (u8) (m->diffuse.r / (float)0x1F * 255.0);
+			// mat->diffuse.g = (u8) (m->diffuse.g / (float)0x1F * 255.0);
+			// mat->diffuse.b = (u8) (m->diffuse.b / (float)0x1F * 255.0);
+			// mat->ambient.r = (u8) (m->ambient.r / (float)0x1F * 255.0);
+			// mat->ambient.g = (u8) (m->ambient.g / (float)0x1F * 255.0);
+			// mat->ambient.b = (u8) (m->ambient.b / (float)0x1F * 255.0);
+			// mat->specular.r = (u8) (m->specular.r / (float)0x1F * 255.0);
+			// mat->specular.g = (u8) (m->specular.g / (float)0x1F * 255.0);
+			// mat->specular.b = (u8) (m->specular.b / (float)0x1F * 255.0);
 
-		MATERIAL* mat = &scene->materials[i];
-		strcpy(mat->name, m->name);
-		mat->texid = m->texid;
-		mat->light = m->light;
-		mat->culling = m->culling;
-		mat->alpha = m->alpha;
-		mat->x_repeat = m->x_repeat;
-		mat->y_repeat = m->y_repeat;
-		mat->polygon_mode = get32bit_LE((u8*)&m->polygon_mode);
-		mat->scale_s = FX_FX32_TO_F32(get32bit_LE((u8*)&m->scale_s));
-		mat->scale_t = FX_FX32_TO_F32(get32bit_LE((u8*)&m->scale_t));
-		mat->translate_s = FX_FX32_TO_F32(get32bit_LE((u8*)&m->translate_s));
-		mat->translate_t = FX_FX32_TO_F32(get32bit_LE((u8*)&m->translate_t));
-		mat->diffuse = m->diffuse;
-		mat->ambient = m->ambient;
-		mat->specular = m->specular;
-		// mat->diffuse.r = (u8) (m->diffuse.r / (float)0x1F * 255.0);
-		// mat->diffuse.g = (u8) (m->diffuse.g / (float)0x1F * 255.0);
-		// mat->diffuse.b = (u8) (m->diffuse.b / (float)0x1F * 255.0);
-		// mat->ambient.r = (u8) (m->ambient.r / (float)0x1F * 255.0);
-		// mat->ambient.g = (u8) (m->ambient.g / (float)0x1F * 255.0);
-		// mat->ambient.b = (u8) (m->ambient.b / (float)0x1F * 255.0);
-		// mat->specular.r = (u8) (m->specular.r / (float)0x1F * 255.0);
-		// mat->specular.g = (u8) (m->specular.g / (float)0x1F * 255.0);
-		// mat->specular.b = (u8) (m->specular.b / (float)0x1F * 255.0);
-
-		mat->texgen_mode = get32bit_LE((u8*)&m->texcoord_transform_mode);
-		mat->matrix_id = get32bit_LE((u8*)&m->matrix_id);
-		if(mat->matrix_id > maxmtx)
-			maxmtx = mat->matrix_id;
-
-		unsigned int p = m->palid;
-		if(p == 0xFFFF)
-			continue;
-		palettes[p].count = get32bit_LE((u8*)&palettes[p].count);
-		palettes[p].entries_ofs = get32bit_LE((u8*)&palettes[p].entries_ofs);
-	}
-	for(i = 0; i < scene->num_textures; i++) {
-		TEXTURE* tex = &scene->textures[i];
-		Texture* t = &textures[i];
-		t->format = get16bit_LE((u8*)&t->format);
-		t->width = get16bit_LE((u8*)&t->width);
-		t->height = get16bit_LE((u8*)&t->height);
-		t->image_ofs = get32bit_LE((u8*)&t->image_ofs);
-		t->imagesize = get32bit_LE((u8*)&t->imagesize);
-		tex->width = t->width;
-		tex->height = t->height;
-		tex->opaque = t->opaque;
-	}
-
-	unsigned int meshcount = 0;
-	Mesh* end = (Mesh*) (scenedata + scenesize);
-	Mesh* mesh;
-	scene->num_dlists = 0;
-	for(mesh = meshes; mesh < end; mesh++) {
-		meshcount++;
-		mesh->matid = get16bit_LE((u8*)&mesh->matid);
-		mesh->dlistid = get16bit_LE((u8*)&mesh->dlistid);
-		if(mesh->dlistid >= scene->num_dlists)
-			scene->num_dlists = mesh->dlistid + 1;
-		Dlist* dlist = &dlists[mesh->dlistid];
-		dlist->start_ofs = get32bit_LE((u8*)&dlist->start_ofs);
-		dlist->size = get32bit_LE((u8*)&dlist->size);
-		u32* data = (u32*) (scenedata + dlist->start_ofs);
-		u32* end = data + dlist->size / 4;
-		while(data < end) {
-			*data = get32bit_LE((u8*)data);
-			data++;
+			mat->texgen_mode = get32bit_LE((u8*)&m->texcoord_transform_mode);
+			mat->matrix_id = get32bit_LE((u8*)&m->matrix_id);
+			mat->palid = m->palid;
+			mat->texid = m->texid;
 		}
 	}
-	scene->num_meshes = meshcount;
 
-	scene->dlists = (int*) malloc(scene->num_dlists * sizeof(int));
-	for(i = 0; i < scene->num_dlists; i++)
-		scene->dlists[i] = -1;
+	scene->palettes = NULL;
+	if(rawheader->palettes) {
+		scene->palettes = (PALETTE*) malloc(scene->num_palettes * sizeof(PALETTE));
+		if(!scene->palettes)
+			fatal("not enough memory");
 
-	make_textures(scene, materials, scene->num_materials, textures, scene->num_textures, palettes, texturedata, texturesize);
+		for(i = 0; i < scene->num_palettes; i++) {
+			PALETTE* pal = &scene->palettes[i];
+			u32 entries_ofs = get32bit_LE((u8*)&palettes[i].entries_ofs);
+			pal->size = get32bit_LE((u8*)&palettes[i].count);
+			if(entries_ofs >= texturesize) {
+				printf("invalid paxel offset for palette %d\n", i, entries_ofs);
+				continue;
+			}
 
-	i = 0;
-	scene->meshes = (MESH*) malloc(sizeof(MESH));
-	if(!scene->meshes)
-		fatal("not enough memory");
-	build_meshes(scene, meshes, dlists, scenedata, scenesize);
+			pal->data = (u16*) malloc(pal->size);
+			u16* src = (u16*) ((uintptr_t)texturedata + (uintptr_t)entries_ofs);
+			for(j = 0; j < pal->size / 2; j++) {
+				pal->data[j] = get16bit_LE((u8*)&src[j]);
+			}
+		}
+	}
 
-	scene->apply_transform = 1;
-	CModel_compute_node_matrices(scene, 0);
+	if(rawheader->textures) {
+		for(i = 0; i < scene->num_textures; i++) {
+			TEXTURE* tex = &scene->textures[i];
+			Texture* t = &textures[i];
+			t->width = get16bit_LE((u8*)&t->width);
+			t->height = get16bit_LE((u8*)&t->height);
+			t->image_ofs = get32bit_LE((u8*)&t->image_ofs);
+			t->imagesize = get32bit_LE((u8*)&t->imagesize);
+			tex->format = get16bit_LE((u8*)&t->format);
+			tex->width = t->width;
+			tex->height = t->height;
+			tex->opaque = t->opaque;
+
+			tex->data = NULL;
+
+			if(t->image_ofs >= texturesize) {
+				printf("invalid texel offset for texture %d\n", i);
+				continue;
+			}
+
+			u8* texels = (u8*) ((uintptr_t)texturedata + (uintptr_t)t->image_ofs);
+			tex->data = (u8*) malloc(t->imagesize);
+			if(!tex->data)
+				fatal("not enough memory");
+			memcpy(tex->data, texels, t->imagesize);
+		}
+	}
+
+	if(rawheader->meshes) {
+		scene->num_dlists = 0;
+		for(i = 0; i < scene->num_meshes; i++) {
+			Mesh* mesh = &meshes[i];
+			mesh->matid = get16bit_LE((u8*)&mesh->matid);
+			mesh->dlistid = get16bit_LE((u8*)&mesh->dlistid);
+			if(mesh->dlistid >= scene->num_dlists)
+				scene->num_dlists = mesh->dlistid + 1;
+			Dlist* dlist = &dlists[mesh->dlistid];
+			dlist->start_ofs = get32bit_LE((u8*)&dlist->start_ofs);
+			dlist->size = get32bit_LE((u8*)&dlist->size);
+			u32* data = (u32*) (scenedata + dlist->start_ofs);
+			u32* end = data + dlist->size / 4;
+			while(data < end) {
+				*data = get32bit_LE((u8*)data);
+				data++;
+			}
+		}
+
+		scene->dlists = (int*) malloc(scene->num_dlists * sizeof(int));
+		for(i = 0; i < scene->num_dlists; i++)
+			scene->dlists[i] = -1;
+	} else {
+		scene->dlists = NULL;
+	}
+
+	if(scene->textures) {
+		make_textures(scene);
+	}
+
+	if(rawheader->meshes) {
+		build_meshes(scene, meshes, dlists, scene->num_meshes, scenedata);
+	}
+
+	if(rawheader->nodes) {
+		scene->apply_transform = 1;
+		CModel_compute_node_matrices(scene, 0);
+	}
 
 	if(rawheader->texture_matrices) {
-		printf("%d texture matrices\n", maxmtx);
+		u16 mtxcnt = get16bit_LE((u8*)&rawheader->num_texture_matrices);
+		printf("%d texture matrices\n", mtxcnt);
 		unsigned int j;
 		MtxFx44* rawmtx = (MtxFx44*) ((uintptr_t)scenedata + (uintptr_t)get32bit_LE((u8*)&rawheader->texture_matrices));
-		scene->texture_matrices = (Mtx44*) alloc_from_heap(maxmtx * sizeof(Mtx44));
-		for(i = 0; i < maxmtx; i++) {
+		scene->texture_matrices = (Mtx44*) alloc_from_heap(mtxcnt * sizeof(Mtx44));
+		for(i = 0; i < mtxcnt; i++) {
 			for(j = 0; j < 16; j++)
 				scene->texture_matrices[i].a[j] = FX_FX32_TO_F32(rawmtx[i].a[j]);
 		}
@@ -1258,6 +1308,27 @@ CModel* CModel_load(u8* scenedata, unsigned int scenesize, u8* texturedata, unsi
 
 	return scene;
 }
+
+void CModel_set_textures(CModel* model)
+{
+	if(!model->textures)
+		return;
+
+	make_textures(model);
+}
+
+void CModel_set_texture_filter(CModel* model, int type)
+{
+	u32 m;
+	for(m = 0; m < model->num_materials; m++) {
+		if(model->materials[m].texid != 0xFFFF) {
+			glBindTexture(GL_TEXTURE_2D, model->materials[m].tex);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, type);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, type);
+		}
+	}
+}
+
 
 void scale_rotate_translate(Mtx44* mtx, float sx, float sy, float sz, float ax, float ay, float az, float x, float y, float z)
 {
@@ -1310,9 +1381,16 @@ void CModel_compute_node_matrices(CModel* model, int start_idx)
 	for(idx = start_idx; idx != -1; idx = node->next) {
 		node = &model->nodes[idx];
 
+#if 1
+		/* NOTE: this fixes translations together with model scale, but it's *broken* in-game */
+		scale_rotate_translate(&transform, node->scale.x, node->scale.y, node->scale.z,
+				node->angle.x, node->angle.y, node->angle.z,
+				node->pos.x / model->scale, node->pos.y / model->scale, node->pos.z / model->scale);
+#else
 		scale_rotate_translate(&transform, node->scale.x, node->scale.y, node->scale.z,
 				node->angle.x, node->angle.y, node->angle.z,
 				node->pos.x, node->pos.y, node->pos.z);
+#endif
 
 		if(node->parent == -1)
 			MTX44Copy(&transform, &node->node_transform);
@@ -1392,7 +1470,7 @@ void CModel_free(CModel* scene)
 
 extern bool lighting;
 
-void CModel_render_mesh(CModel* scene, int mesh_id, int render_notex)
+void CModel_render_mesh(CModel* scene, int mesh_id)
 {
 	if(mesh_id >= scene->num_meshes) {
 		printf("trying to render mesh %d, but scene only has %d meshes\n", mesh_id, scene->num_meshes);
@@ -1429,8 +1507,6 @@ void CModel_render_mesh(CModel* scene, int mesh_id, int render_notex)
 	} else {
 		glBindTexture(GL_TEXTURE_2D, 0);
 		glUniform1i(use_texture, 0);
-		if(!render_notex)
-			return;
 	}
 
 	if(lighting && material->light) {
@@ -1488,126 +1564,79 @@ static void CModel_update_uniforms(void)
 	glUniform1i(fog_enable, fogen && !fogdis);
 	glUniform4fv(fog_color, 1, fogcol);
 	glUniform1i(fog_offset, fogoff);
+	glUniform1f(alpha_scale, 1.0f);
+}
+
+void CModel_render_all_i(CModel* scene, int render_mode)
+{
+	unsigned int i, j;
+
+	for(i = 0; i < scene->num_nodes; i++) {
+		NODE* node = &scene->nodes[i];
+		if(node->mesh_count) {
+			int mesh_id = node->mesh_id / 2;
+
+			if(scene->apply_transform) {
+				glMatrixMode(GL_MODELVIEW);
+				glPushMatrix();
+				glMultMatrixf(node->node_transform.a);
+			}
+
+			for(j = 0; j < node->mesh_count; j++) {
+				int id = mesh_id + j;
+				MESH* mesh = &scene->meshes[id];
+				MATERIAL* material = &scene->materials[mesh->matid];
+
+				if(material->render_mode != render_mode)
+					continue;
+
+				CModel_billboard(node);
+				CModel_render_mesh(scene, id);
+			}
+
+			if(scene->apply_transform) {
+				glMatrixMode(GL_MODELVIEW);
+				glPopMatrix();
+			}
+		}
+	}
 }
 
 void CModel_render_all(CModel* scene)
 {
-	// GLboolean cull;
-	unsigned int i, j;
-
 	glUseProgram(shader);
 
 	CModel_update_uniforms();
 
 	// pass 1: opaque
 	glDepthMask(GL_TRUE);
-	for(i = 0; i < scene->num_nodes; i++) {
-		NODE* node = &scene->nodes[i];
-		if(node->mesh_count) {
-			int mesh_id = node->mesh_id / 2;
-
-			if(scene->apply_transform) {
-				glMatrixMode(GL_MODELVIEW);
-				glPushMatrix();
-				glMultMatrixf(node->node_transform.a);
-			}
-
-			for(j = 0; j < node->mesh_count; j++) {
-				int id = mesh_id + j;
-				MESH* mesh = &scene->meshes[id];
-				MATERIAL* material = &scene->materials[mesh->matid];
-
-				if(material->render_mode != NORMAL)
-					continue;
-
-				CModel_billboard(node);
-				CModel_render_mesh(scene, id, 1);
-			}
-
-			if(scene->apply_transform) {
-				glMatrixMode(GL_MODELVIEW);
-				glPopMatrix();
-			}
-		}
-	}
-
-	// pass 2: opaque pixels on translucent surfaces
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	CModel_render_all_i(scene, NORMAL);
+
+	// pass 2: opaque pixels on translucent surfaces
+	// glEnable(GL_BLEND);
+	// glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 	glEnable(GL_ALPHA_TEST);
-	glAlphaFunc(GL_GEQUAL, 0.95f);
-	for(i = 0; i < scene->num_nodes; i++) {
-		NODE* node = &scene->nodes[i];
-		if(node->mesh_count) {
-			int mesh_id = node->mesh_id / 2;
-
-			if(scene->apply_transform) {
-				glMatrixMode(GL_MODELVIEW);
-				glPushMatrix();
-				glMultMatrixf(node->node_transform.a);
-			}
-
-			for(j = 0; j < node->mesh_count; j++) {
-				int id = mesh_id + j;
-				MESH* mesh = &scene->meshes[id];
-				MATERIAL* material = &scene->materials[mesh->matid];
-
-				if(material->render_mode == NORMAL)
-					continue;
-
-				CModel_billboard(node);
-				CModel_render_mesh(scene, id, 1);
-			}
-
-			if(scene->apply_transform) {
-				glMatrixMode(GL_MODELVIEW);
-				glPopMatrix();
-			}
-		}
-	}
+	glAlphaFunc(GL_GEQUAL, 0.999f);
+	CModel_render_all_i(scene, DECAL);
+	CModel_render_all_i(scene, TRANSLUCENT);
+	CModel_render_all_i(scene, ALPHA_TEST);
 
 	// pass 3: translucent
 	// glGetBooleanv(GL_CULL_FACE, &cull);
 	// glDisable(GL_CULL_FACE);
-	glAlphaFunc(GL_LESS, 0.95f);
+	glAlphaFunc(GL_LESS, 0.999f);
 	// glEnable(GL_BLEND);
 	glDepthMask(GL_FALSE);
 	// glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-	for(i = 0; i < scene->num_nodes; i++) {
-		NODE* node = &scene->nodes[i];
-		if(node->mesh_count) {
-			int mesh_id = node->mesh_id / 2;
+	CModel_render_all_i(scene, DECAL);
+	CModel_render_all_i(scene, TRANSLUCENT);
+	CModel_render_all_i(scene, ALPHA_TEST);
 
-			if(scene->apply_transform) {
-				glMatrixMode(GL_MODELVIEW);
-				glPushMatrix();
-				glMultMatrixf(node->node_transform.a);
-			}
-
-			for(j = 0; j < node->mesh_count; j++) {
-				int id = mesh_id + j;
-				MESH* mesh = &scene->meshes[id];
-				MATERIAL* material = &scene->materials[mesh->matid];
-
-				if(material->render_mode == NORMAL)
-					continue;
-
-				CModel_billboard(node);
-				CModel_render_mesh(scene, id, 1);
-			}
-
-			if(scene->apply_transform) {
-				glMatrixMode(GL_MODELVIEW);
-				glPopMatrix();
-			}
-		}
-	}
 	glDepthMask(GL_TRUE);
 	glDisable(GL_BLEND);
 	glDisable(GL_ALPHA_TEST);
-	// if(cull) {
-	// 	glEnable(GL_CULL_FACE);
-	// }
 
 	glUseProgram(0);
 }
@@ -1628,7 +1657,7 @@ void CModel_render_node_tree(CModel* scene, int node_idx)
 			}
 
 			for(i = 0; i < node->mesh_count; i++)
-				CModel_render_mesh(scene, mesh_id + i, 0);
+				CModel_render_mesh(scene, mesh_id + i);
 
 			if(scene->apply_transform) {
 				glMatrixMode(GL_MODELVIEW);
@@ -1641,17 +1670,11 @@ void CModel_render_node_tree(CModel* scene, int node_idx)
 	}
 }
 
-void CModel_render_all_nodes(CModel* scene)
+void CModel_render_node_i(CModel* scene, int node_idx, int render_mode)
 {
 	unsigned int i, j;
 
-	glUseProgram(shader);
-
-	CModel_update_uniforms();
-
-	// pass 1: opaque
-	glDepthMask(GL_TRUE);
-	for(i = 0; i < scene->num_nodes; i++) {
+	for(i = node_idx; i != -1; i = scene->nodes[i].next) {
 		NODE* node = &scene->nodes[i];
 		if(node->mesh_count > 0 && node->enabled == 1) {
 			int mesh_id = node->mesh_id / 2;
@@ -1667,11 +1690,87 @@ void CModel_render_all_nodes(CModel* scene)
 				MESH* mesh = &scene->meshes[id];
 				MATERIAL* material = &scene->materials[mesh->matid];
 
-				if(material->render_mode != NORMAL)
+				if(material->render_mode != render_mode)
 					continue;
 
 				CModel_billboard(node);
-				CModel_render_mesh(scene, id, 0);
+				CModel_render_mesh(scene, id);
+			}
+
+			if(scene->apply_transform) {
+				glMatrixMode(GL_MODELVIEW);
+				glPopMatrix();
+			}
+		}
+
+		if(node->child != -1)
+			CModel_render_node_i(scene, node->child, render_mode);
+	}
+}
+
+void CModel_render_node(CModel* scene, int node_idx, float alpha)
+{
+	glUseProgram(shader);
+
+	CModel_update_uniforms();
+	glUniform1f(alpha_scale, alpha);
+
+	// pass 1: opaque
+	glDepthMask(GL_TRUE);
+	glEnable(GL_BLEND);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	CModel_render_node_i(scene, node_idx, NORMAL);
+
+	// pass 2: decal
+	glEnable(GL_POLYGON_OFFSET_FILL);
+	glPolygonOffset(-1, -1);
+	glDepthMask(GL_FALSE);
+	CModel_render_node_i(scene, node_idx, DECAL);
+
+	// pass 3: translucent with alpha test
+	glEnable(GL_ALPHA_TEST);
+	glDepthMask(GL_TRUE);
+	glAlphaFunc(GL_GEQUAL, 0.01f);
+	CModel_render_node_i(scene, node_idx, ALPHA_TEST);
+
+	// pass 4: translucent
+	glDepthMask(GL_FALSE);
+	CModel_render_node_i(scene, node_idx, TRANSLUCENT);
+
+	glPolygonOffset(0, 0);
+	glDisable(GL_POLYGON_OFFSET_FILL);
+
+	glDepthMask(GL_TRUE);
+	glDisable(GL_BLEND);
+
+	glUseProgram(0);
+}
+
+void CModel_render_nodes_i(CModel* scene, int node_idx, int render_mode)
+{
+	unsigned int i, j;
+
+	for(i = node_idx; i != -1; i = scene->nodes[i].next) {
+		NODE* node = &scene->nodes[i];
+		if(node->mesh_count > 0 && node->enabled == 1) {
+			int mesh_id = node->mesh_id / 2;
+
+			if(scene->apply_transform) {
+				glMatrixMode(GL_MODELVIEW);
+				glPushMatrix();
+				glMultMatrixf(node->node_transform.a);
+			}
+
+			for(j = 0; j < node->mesh_count; j++) {
+				int id = mesh_id + j;
+				MESH* mesh = &scene->meshes[id];
+				MATERIAL* material = &scene->materials[mesh->matid];
+
+				if(material->render_mode != render_mode)
+					continue;
+
+				CModel_billboard(node);
+				CModel_render_mesh(scene, id);
 			}
 
 			if(scene->apply_transform) {
@@ -1680,6 +1779,17 @@ void CModel_render_all_nodes(CModel* scene)
 			}
 		}
 	}
+}
+
+void CModel_render_nodes(CModel* scene, int node_idx)
+{
+	glUseProgram(shader);
+
+	CModel_update_uniforms();
+
+	// pass 1: opaque
+	glDepthMask(GL_TRUE);
+	CModel_render_nodes_i(scene, node_idx, NORMAL);
 
 	// pass 2: decal
 	glEnable(GL_POLYGON_OFFSET_FILL);
@@ -1687,104 +1797,18 @@ void CModel_render_all_nodes(CModel* scene)
 	glDepthMask(GL_FALSE);
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-	for(i = 0; i < scene->num_nodes; i++) {
-		NODE* node = &scene->nodes[i];
-		if(node->mesh_count > 0 && node->enabled == 1) {
-			int mesh_id = node->mesh_id / 2;
-
-			if(scene->apply_transform) {
-				glMatrixMode(GL_MODELVIEW);
-				glPushMatrix();
-				glMultMatrixf(node->node_transform.a);
-			}
-
-			for(j = 0; j < node->mesh_count; j++) {
-				int id = mesh_id + j;
-				MESH* mesh = &scene->meshes[id];
-				MATERIAL* material = &scene->materials[mesh->matid];
-
-				if(material->render_mode != DECAL)
-					continue;
-
-				CModel_billboard(node);
-				CModel_render_mesh(scene, id, 0);
-			}
-
-			if(scene->apply_transform) {
-				glMatrixMode(GL_MODELVIEW);
-				glPopMatrix();
-			}
-		}
-	}
+	CModel_render_nodes_i(scene, node_idx, DECAL);
 
 	// pass 3: translucent with alpha test
 	glEnable(GL_ALPHA_TEST);
 	glDepthMask(GL_TRUE);
-	glAlphaFunc(GL_GEQUAL, 0.25f);
-	for(i = 0; i < scene->num_nodes; i++) {
-		NODE* node = &scene->nodes[i];
-		if(node->mesh_count > 0 && node->enabled == 1) {
-			int mesh_id = node->mesh_id / 2;
-
-			if(scene->apply_transform) {
-				glMatrixMode(GL_MODELVIEW);
-				glPushMatrix();
-				glMultMatrixf(node->node_transform.a);
-			}
-
-			for(j = 0; j < node->mesh_count; j++) {
-				int id = mesh_id + j;
-				MESH* mesh = &scene->meshes[id];
-				MATERIAL* material = &scene->materials[mesh->matid];
-				TEXTURE* texture = &scene->textures[material->texid];
-
-				if(material->render_mode != ALPHA_TEST)
-					continue;
-
-				CModel_billboard(node);
-				CModel_render_mesh(scene, id, 0);
-			}
-
-			if(scene->apply_transform) {
-				glMatrixMode(GL_MODELVIEW);
-				glPopMatrix();
-			}
-		}
-	}
+	glAlphaFunc(GL_GEQUAL, 0.01f);
+	CModel_render_nodes_i(scene, node_idx, ALPHA_TEST);
 	glDisable(GL_ALPHA_TEST);
 
 	// pass 4: translucent
 	glDepthMask(GL_FALSE);
-	for(i = 0; i < scene->num_nodes; i++) {
-		NODE* node = &scene->nodes[i];
-		if(node->mesh_count > 0 && node->enabled == 1) {
-			int mesh_id = node->mesh_id / 2;
-
-			if(scene->apply_transform) {
-				glMatrixMode(GL_MODELVIEW);
-				glPushMatrix();
-				glMultMatrixf(node->node_transform.a);
-			}
-
-			for(j = 0; j < node->mesh_count; j++) {
-				int id = mesh_id + j;
-				MESH* mesh = &scene->meshes[id];
-				MATERIAL* material = &scene->materials[mesh->matid];
-				TEXTURE* texture = &scene->textures[material->texid];
-
-				if(material->render_mode != TRANSLUCENT)
-					continue;
-
-				CModel_billboard(node);
-				CModel_render_mesh(scene, id, 0);
-			}
-
-			if(scene->apply_transform) {
-				glMatrixMode(GL_MODELVIEW);
-				glPopMatrix();
-			}
-		}
-	}
+	CModel_render_nodes_i(scene, node_idx, TRANSLUCENT);
 
 	glPolygonOffset(0, 0);
 	glDisable(GL_POLYGON_OFFSET_FILL);
@@ -1800,6 +1824,6 @@ void CModel_render(CModel* scene)
 	if(scene->room_node_id == -1) {
 		CModel_render_all(scene);
 	} else {
-		CModel_render_all_nodes(scene);
+		CModel_render_nodes(scene, scene->room_node_id);
 	}
 }

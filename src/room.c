@@ -14,6 +14,7 @@ Entity* entities;
 
 CRoom* load_room(const RoomDescription* descr, fx32 x, fx32 y, fx32 z, int layer_mask)
 {
+	int i;
 	char filename[256];
 	char txtrfilename[256];
 
@@ -46,6 +47,7 @@ CRoom* load_room(const RoomDescription* descr, fx32 x, fx32 y, fx32 z, int layer
 	} else {
 		load_room_model(&room->model, filename, NULL, flags, room->layer_mask);
 	}
+	// room->model->apply_transform = 0;
 
 	if(descr->anim) {
 		sprintf(filename, "%s/%s", descr->archive_name, descr->anim);
@@ -58,6 +60,18 @@ CRoom* load_room(const RoomDescription* descr, fx32 x, fx32 y, fx32 z, int layer
 		EntLoad(&entities, filename, layer_id);
 
 		CEntity_initialize(entities, room->model->nodes);
+	}
+
+	// setup node refs
+	room->room_nodes = NULL;
+	for(i = 0; i < room->model->num_nodes; i++) {
+		NODE* node = &room->model->nodes[i];
+		if(node->name[0] == 'r' && node->name[1] == 'm') {
+			NodeRef* ref = (NodeRef*) malloc(sizeof(NodeRef));
+			ref->node_id = node->child;
+			ref->next = room->room_nodes;
+			room->room_nodes = ref;
+		}
 	}
 
 	return room;
@@ -91,6 +105,7 @@ void CRoom_setLights(CRoom* room)
 
 void CRoom_render(CRoom* room)
 {
+	NodeRef* ref;
 	float fogcolor[4] = { COLOR_R(room->description->fog_color), COLOR_G(room->description->fog_color), COLOR_B(room->description->fog_color), 1 };
 	glMatrixMode(GL_MODELVIEW);
 	glPushMatrix();
@@ -98,7 +113,8 @@ void CRoom_render(CRoom* room)
 	glScalef(room->model->scale, room->model->scale, room->model->scale);
 	CRoom_setLights(room);
 	CModel_setFog(room->description->fog_enable, fogcolor, room->description->fog_offset);
-	CModel_render(room->model);
+	for(ref = room->room_nodes; ref; ref = ref->next)
+		CModel_render_nodes(room->model, ref->node_id);
 	glMatrixMode(GL_MODELVIEW);
 	glPopMatrix();
 }

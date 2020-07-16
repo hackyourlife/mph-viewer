@@ -70,6 +70,7 @@ typedef struct {
 	float				translate_t;
 	unsigned int			alpha;
 	unsigned int			texid;
+	unsigned int			palid;
 	unsigned int			tex;
 	unsigned int			render_mode;
 	Color3				diffuse;
@@ -102,19 +103,30 @@ typedef struct {
 } MESH;
 
 typedef struct {
+	unsigned int			format;
 	unsigned int			width;
 	unsigned int			height;
 	bool				opaque;
+	u8*				data;
 } TEXTURE;
 
 typedef struct {
+	unsigned int			size;
+	u16*				data;
+} PALETTE;
+
+typedef struct {
+	void*				scenedata;
+
 	MATERIAL*			materials;
 	NODE*				nodes;
 	MESH*				meshes;
 	int*				dlists;
-	unsigned int			num_meshes;
 	TEXTURE*			textures;
+	PALETTE*			palettes;
+	unsigned int			num_meshes;
 	unsigned int			num_textures;
+	unsigned int			num_palettes;
 	unsigned int			num_materials;
 	unsigned int			num_dlists;
 	unsigned int			num_nodes;
@@ -139,6 +151,7 @@ typedef struct {
 	CTexcoordAnimationGroup*	texcoord_animations;
 } CModel;
 
+int	get_node_child(const char* name, CModel* scene);
 void	CModel_init(void);
 void	CModel_setLights(float l1vec[4], float l1col[4], float l2vec[4], float l2col[4]);
 void	CModel_setFog(bool en, float fogc[4], int fogoffset);
@@ -147,8 +160,13 @@ void	load_model(CModel** model, const char* filename, int flags);
 void	load_room_model(CModel** model, const char* filename, const char* txtrfilename, int flags, int layer_mask);
 CModel*	CModel_load(u8* scenedata, unsigned int scenesize, u8* texturedata, unsigned int texturesize, int layer_mask);
 CModel*	CModel_load_file(const char* model, const char* textures, int layer_mask);
+void	CModel_set_textures(CModel* model);
+void	CModel_set_texture_filter(CModel* model, int type);
 void	CModel_free(CModel* scene);
 void	CModel_render(CModel* scene);
+void	CModel_render_all(CModel* scene);
+void	CModel_render_nodes(CModel* scene, int node_idx);
+void	CModel_render_node(CModel* scene, int node_idx, float alpha);
 void	CModel_compute_node_matrices(CModel* model, int start_idx);
 
 #endif

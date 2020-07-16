@@ -187,12 +187,8 @@ void kb_func(unsigned char key, int x, int y)
 
 		case 'f':	case 'F': {
 			tex_filtering = !tex_filtering;
-			u32 m;
-			for(m = 0; m < room->model->num_materials; m++) {
-				glBindTexture(GL_TEXTURE_2D, m + 1);
-				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, tex_filtering ? GL_LINEAR : GL_NEAREST);
-				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, tex_filtering ? GL_LINEAR : GL_NEAREST);
-			}
+			CModel_set_texture_filter(room->model, tex_filtering ? GL_LINEAR : GL_NEAREST);
+			EntSetTextureFilter(tex_filtering ? GL_LINEAR : GL_NEAREST);
 			glutPostRedisplay();
 		}
 		break;

@@ -16,7 +16,9 @@ extern PFNGLLOADTRANSPOSEMATRIXFPROC glLoadTransposeMatrixf;
 extern PFNGLMULTTRANSPOSEMATRIXFPROC glMultTransposeMatrixf;
 #endif
 
-static const char* jump_pads[6] = {
+#define	NUM_JUMP_PADS	6
+
+static const char* jump_pads[NUM_JUMP_PADS] = {
 	"JumpPad",
 	"JumpPad_Alimbic",
 	"JumpPad_Ice",
@@ -25,8 +27,8 @@ static const char* jump_pads[6] = {
 	"JumpPad_LavaStation"
 };
 
-static CModel* jump_pad_models[6] = { 0 };
-static CAnimation* jump_pad_anims[6] = { 0 };
+static CModel* jump_pad_models[NUM_JUMP_PADS] = { 0 };
+static CAnimation* jump_pad_anims[NUM_JUMP_PADS] = { 0 };
 static CModel* jump_pad_beam_model = NULL;
 static CAnimation* jump_pad_beam_animation = NULL;
 
@@ -75,7 +77,7 @@ static void CJumpPad_set_beam_mtx(CJumpPad* self, Mtx44* base)
 
 void CJumpPad_process_class(float dt)
 {
-	for(int i = 0; i < 6; i++) {
+	for(int i = 0; i < NUM_JUMP_PADS; i++) {
 		if(jump_pad_anims[i])
 			CAnimation_process(jump_pad_anims[i], dt);
 	}
@@ -143,6 +145,16 @@ Vec3* CJumpPad_get_position(CEntity* obj)
 	return &self->pos;
 }
 
+void CJumpPad_set_tex_filter(int type)
+{
+	for(int i = 0; i < NUM_JUMP_PADS; i++) {
+		if(jump_pad_models[i])
+			CModel_set_texture_filter(jump_pad_models[i], type);
+	}
+	if(jump_pad_beam_model)
+		CModel_set_texture_filter(jump_pad_beam_model, type);
+}
+
 void EntJumpPadRegister(void)
 {
 	EntityClass* ent = EntRegister(JUMP_PAD);
@@ -150,4 +162,5 @@ void EntJumpPadRegister(void)
 	ent->process_class = CJumpPad_process_class;
 	ent->render = CJumpPad_render;
 	ent->get_position = CJumpPad_get_position;
+	ent->set_tex_filter = CJumpPad_set_tex_filter;
 }
