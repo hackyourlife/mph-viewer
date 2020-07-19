@@ -384,10 +384,12 @@ float interpolate(float* values, int frame, int speed, int length, int frame_cou
 	if(speed == 1)
 		return values[frame];
 
-	int v7 = (frame - 1) >> (speed / 2) << (speed / 2);
-	if(frame >= v7)
-		return values[frame - v7 + (frame >> (speed / 2))];
+	// if we can't interpolate, use the last frame
+	int limit = (frame_count - 1) >> (speed / 2) << (speed / 2);
+	if(frame >= limit)
+		return values[frame - limit + (frame >> (speed / 2))];
 
+	// interpolate between two frames if necessary
 	int idx_1 = frame >> (speed / 2);
 	int idx_2 = (frame >> (speed / 2)) + 1;
 

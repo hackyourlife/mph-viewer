@@ -174,13 +174,16 @@ CEntity* CObject_construct(const char* node_name, EntityData* data)
 
 	EntityObject* ent = (EntityObject*)data;
 
-	printf("Object: id=%d\n", ent->object_id);
+	printf("Object: id=%d [scan=%d, entity id=%d]\n", ent->object_id, ent->scan_id, ent->header.id);
 
 	CObject* obj = (CObject*)alloc_from_heap(sizeof(CObject));
 	CEntityCtor(&obj->base, data);
 
 	obj->object_id = ent->object_id;
+	// normally this only happens if flags & 3 or object_id == 53
+	obj->base.scan_id = ent->scan_id;
 
+	/* hide alimbic data shades */
 	if(obj->object_id == 0)
 		obj->object_id = -1;
 

@@ -3,6 +3,8 @@
 #include <Windows.h>
 #endif
 
+// #define TEXDUMP
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -64,7 +66,8 @@ enum RENDER_MODE {
 	DECAL = 1,
 	TRANSLUCENT = 2,
 	// viewer only, not stored in a file
-	ALPHA_TEST = 3
+	ALPHA_TEST = 3,
+	HIDDEN = 4
 };
 
 typedef struct {
@@ -270,7 +273,6 @@ uniform float far_plane; \n\
 \n\
 varying vec2 texcoord; \n\
 varying vec4 color; \n\
-varying float depth; \n\
 \n\
 void main() \n\
 { \n\
@@ -303,7 +305,6 @@ void main() \n\
 		color = gl_Color; \n\
 	} \n\
 	texcoord = vec2(gl_TextureMatrix[0] * gl_MultiTexCoord0); \n\
-	depth = clamp(gl_Position.z / gl_DepthRange.far * 8.0, 0, 1); \n\
 }";
 const char* fragment_shader = "\
 uniform bool is_billboard; \n\
@@ -316,7 +317,6 @@ uniform float alpha_scale; \n\
 uniform sampler2D tex; \n\
 varying vec2 texcoord; \n\
 varying vec4 color; \n\
-varying float depth; \n\
 \n\
 void main() \n\
 { \n\
@@ -330,15 +330,17 @@ void main() \n\
 	if(fog_enable) { \n\
 		float ndcDepth = (2.0 * gl_FragCoord.z - gl_DepthRange.near - gl_DepthRange.far) / (gl_DepthRange.far - gl_DepthRange.near); \n\
 		float clipDepth = ndcDepth / gl_FragCoord.w; \n\
-		depth = clamp(clipDepth / 128.0, 0, 1); \n\
-		float density = depth - (1 - float(fog_offset) / 65536.0); \n\
-		if(density < 0) \n\
-			density = 0; \n\
-		gl_FragColor = vec4((col * (1 - density) + fog_color * density).xyz, col.a * alpha_scale); \n\
+		float depth = clamp(clipDepth / 128.0, 0.0, 1.0); \n\
+		float density = depth - (1.0 - float(fog_offset) / 65536.0); \n\
+		if(density < 0.0) \n\
+			density = 0.0; \n\
+		// adjust fog slope \n\
+		density = sqrt(density / 32.0); \n\
+		gl_FragColor = vec4((col * (1.0 - density) + fog_color * density).xyz, col.a * alpha_scale); \n\
 		// float i = density; \n\
 		// gl_FragColor = vec4(i, i, i, 1); \n\
 	} else { \n\
-		gl_FragColor = col * vec4(1, 1, 1, alpha_scale); \n\
+		gl_FragColor = col * vec4(1.0, 1.0, 1.0, alpha_scale); \n\
 	} \n\
 }";
 
@@ -415,7 +417,7 @@ void CModel_init(void)
 	glShaderSource(fs, 1, &fragment_shader, 0);
 	glCompileShader(fs);
 
-	glGetShaderiv(vs, GL_COMPILE_STATUS, &compiled);
+	glGetShaderiv(fs, GL_COMPILE_STATUS, &compiled);
 	if(compiled == GL_FALSE) {
 		GLint len = 0;
 		glGetShaderiv(fs, GL_INFO_LOG_LENGTH, &len);
@@ -467,6 +469,86 @@ void CModel_init(void)
 	fog_offset = glGetUniformLocation(shader, "fog_offset");
 	alpha_scale = glGetUniformLocation(shader, "alpha_scale");
 }
+
+unsigned int crc32(u8* data, u32 len) {
+	int i, j;
+	unsigned int byte, crc, mask;
+
+	i = 0;
+	crc = 0xFFFFFFFF;
+	while(len--) {
+		crc = crc ^ data[i];
+		for (j = 7; j >= 0; j--) {
+			mask = -(crc & 1);
+			crc = (crc >> 1) ^ (0xEDB88320 & mask);
+		}
+		i = i + 1;
+	}
+	return ~crc;
+}
+
+#ifdef TEXDUMP
+typedef struct {
+	u16	bfType;
+	u32	bfSize;
+	u32	bfReserved;
+	u32	bfOffBits;
+	u32	biSize;
+	u32	biWidth;
+	u32	biHeight;
+	u16	biPlanes;
+	u16	biBitCount;
+	u32	biCompression;
+	u32	biSizeImage;
+	u32	biXPelsPerMeter;
+	u32	biYPelsPerMeter;
+	u32	biClrUsed;
+	u32	biClrImportant;
+} __attribute__((packed, aligned(1))) BMP;
+#endif
+
+typedef struct {
+	char	name[64];
+	u32	checksum;
+	int	x_repeat;
+	int	y_repeat;
+	int	filter;
+} TEXOVERRIDE;
+
+#define	NUM_OVERRIDES	11
+
+static TEXOVERRIDE mtl_overrides[NUM_OVERRIDES] = {
+	/* alimbic door glow */
+	{ "AlimbicDoorGlow_Material", 0x84C7B8C1, CLAMP, CLAMP, 1 },
+	/* lava terminal */
+	{ "Glow_Material", 0x6C64B284, -1, CLAMP, -1 },
+	/* alimbic terminal */
+	{ "Text_Material", 0xE79BB5B0, -1, -1, 0 },
+	/* proximity force fields */
+	{ "lambert179", 0xC3CB70DB, -1, -1, 1 },
+	{ "pmag1", 0x7E029EA2, -1, -1, 1 },
+	{ "lambert161", 0xBBB3556B, -1, -1, 1 },
+	/* tetra galaxy map */
+	{ "lambert44", 0x3B098D90, -1, -1, 0 },
+	/* pole swirl */
+	{ "swirl", 0x7680D648, -1, -1, 1 },
+	/* light rays */
+	{ "LightGrad", 0x9A4B2EBB, CLAMP, CLAMP, 1 },
+	/* stronghold void */
+	{ "fire_pit", 0xF25B969A, -1, -1, 1 },
+	{ "roof", 0xEC5CFB0F, -1, -1, 1 }
+};
+
+typedef struct {
+	char	name[64];
+	u32	checksum;
+} TEXHIDE;
+
+#define	NUM_HIDDEN	1
+
+static TEXHIDE mtl_hidden[NUM_HIDDEN] = {
+	{ "blinn2", 0x73F75D53 }
+};
 
 static void update_bounds(CModel* scene, float vtx_state[3])
 {
@@ -900,10 +982,13 @@ static void make_textures(CModel* model)
 		glGenTextures(1, &mat->tex);
 		glBindTexture(GL_TEXTURE_2D, mat->tex);
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, tex->width, tex->height, 0, GL_RGBA, GL_UNSIGNED_BYTE, (GLvoid*)image);
-		//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-		//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+#if 0
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+#else
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+#endif
 		switch(mat->x_repeat) {
 			case CLAMP:
 				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -930,6 +1015,103 @@ static void make_textures(CModel* model)
 			default:
 				printf("unknown repeat mode %d\n", mat->x_repeat);
 		}
+
+		u32 texsize = num_pixels;
+		if(tex->format == 0)
+			texsize /= 4;
+		else if(tex->format == 1)
+			texsize /= 2;
+		else if(tex->format == 5)
+			texsize *= 2;
+
+		u32 hash = crc32(texels, texsize);
+
+#ifdef TEXDUMP
+		char filename[128];
+		if(mat->name[0] == 0) {
+			sprintf(filename, "texdump/%08x.bmp", hash);
+		} else {
+			sprintf(filename, "texdump/%s-%08x.bmp", mat->name, hash);
+		}
+		FILE* f = fopen(filename, "wb");
+		BMP bmp;
+		bmp.bfType = 0x4D42;
+		bmp.bfSize = sizeof(BMP) + tex->width * tex->height * 4;
+		bmp.bfReserved = 0;
+		bmp.bfOffBits = sizeof(BMP);
+		bmp.biSize = 40;
+		bmp.biWidth = tex->width;
+		bmp.biHeight = tex->height;
+		bmp.biPlanes = 1;
+		bmp.biBitCount = 32;
+		bmp.biCompression = 0;
+		bmp.biSizeImage = 0;
+		bmp.biXPelsPerMeter = 0;
+		bmp.biYPelsPerMeter = 0;
+		bmp.biClrUsed = 0;
+		bmp.biClrImportant = 0;
+		fwrite(&bmp, sizeof(BMP), 1, f);
+		for(u32 n = 0; n < (tex->width * tex->height); n++) {
+			u32 px = image[n];
+			u32 r = (px >>  0) & 0xFF;
+			u32 g = (px >>  8) & 0xFF;
+			u32 b = (px >> 16) & 0xFF;
+			u32 a = (px >> 24) & 0xFF;
+			px = b | (g << 8) | (r << 16) | (a << 24);
+			fwrite(&px, 4, 1, f);
+		}
+		fclose(f);
+#endif
+
+		for(u32 n = 0; n < NUM_OVERRIDES; n++) {
+			TEXOVERRIDE* ovr = &mtl_overrides[n];
+			if(ovr->checksum == hash) {
+				if(ovr->x_repeat >= 0) {
+					switch(ovr->x_repeat) {
+						case CLAMP:
+							glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+							break;
+						case REPEAT:
+							glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+							break;
+						case MIRROR:
+							glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_MIRRORED_REPEAT);
+							break;
+						default:
+							printf("unknown repeat mode %d\n", ovr->x_repeat);
+					}
+				}
+				if(ovr->y_repeat >= 0) {
+					switch(ovr->y_repeat) {
+						case CLAMP:
+							glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+							break;
+						case REPEAT:
+							glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+							break;
+						case MIRROR:
+							glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_MIRRORED_REPEAT);
+							break;
+						default:
+							printf("unknown repeat mode %d\n", ovr->y_repeat);
+					}
+				}
+				if(ovr->filter >= 0) {
+					int type = ovr->filter ? GL_LINEAR : GL_NEAREST;
+					glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, type);
+					glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, type);
+				}
+			}
+		}
+
+		// TODO: this is a hack to hide broken things
+		for(u32 n = 0; n < NUM_HIDDEN; n++) {
+			TEXHIDE* hide = &mtl_hidden[n];
+			if(hide->checksum == hash) {
+				// mat->render_mode = HIDDEN;
+			}
+		}
+
 		glBindTexture(GL_TEXTURE_2D, 0);
 		free(image);
 	}
@@ -1470,6 +1652,8 @@ void CModel_free(CModel* scene)
 
 extern bool lighting;
 
+static NODE* current_node;
+
 void CModel_render_mesh(CModel* scene, int mesh_id)
 {
 	if(mesh_id >= scene->num_meshes) {
@@ -1573,6 +1757,7 @@ void CModel_render_all_i(CModel* scene, int render_mode)
 
 	for(i = 0; i < scene->num_nodes; i++) {
 		NODE* node = &scene->nodes[i];
+		current_node = node;
 		if(node->mesh_count) {
 			int mesh_id = node->mesh_id / 2;
 
@@ -1605,6 +1790,10 @@ void CModel_render_all_i(CModel* scene, int render_mode)
 void CModel_render_all(CModel* scene)
 {
 	glUseProgram(shader);
+
+	glMatrixMode(GL_MODELVIEW);
+	glPushMatrix();
+	glScalef(scene->scale, scene->scale, scene->scale);
 
 	CModel_update_uniforms();
 
@@ -1639,6 +1828,9 @@ void CModel_render_all(CModel* scene)
 	glDisable(GL_ALPHA_TEST);
 
 	glUseProgram(0);
+
+	glMatrixMode(GL_MODELVIEW);
+	glPopMatrix();
 }
 
 void CModel_render_node_tree(CModel* scene, int node_idx)
@@ -1647,6 +1839,7 @@ void CModel_render_node_tree(CModel* scene, int node_idx)
 	int start_node = node_idx;
 	while(node_idx != -1) {
 		NODE* node = &scene->nodes[node_idx];
+		current_node = node;
 		if(node->mesh_count > 0 && node->enabled == 1) {
 			int mesh_id = node->mesh_id / 2;
 
@@ -1676,6 +1869,7 @@ void CModel_render_node_i(CModel* scene, int node_idx, int render_mode)
 
 	for(i = node_idx; i != -1; i = scene->nodes[i].next) {
 		NODE* node = &scene->nodes[i];
+		current_node = node;
 		if(node->mesh_count > 0 && node->enabled == 1) {
 			int mesh_id = node->mesh_id / 2;
 
@@ -1710,6 +1904,10 @@ void CModel_render_node_i(CModel* scene, int node_idx, int render_mode)
 
 void CModel_render_node(CModel* scene, int node_idx, float alpha)
 {
+	glMatrixMode(GL_MODELVIEW);
+	glPushMatrix();
+	glScalef(scene->scale, scene->scale, scene->scale);
+
 	glUseProgram(shader);
 
 	CModel_update_uniforms();
@@ -1744,6 +1942,9 @@ void CModel_render_node(CModel* scene, int node_idx, float alpha)
 	glDisable(GL_BLEND);
 
 	glUseProgram(0);
+
+	glMatrixMode(GL_MODELVIEW);
+	glPopMatrix();
 }
 
 void CModel_render_nodes_i(CModel* scene, int node_idx, int render_mode)
@@ -1752,6 +1953,7 @@ void CModel_render_nodes_i(CModel* scene, int node_idx, int render_mode)
 
 	for(i = node_idx; i != -1; i = scene->nodes[i].next) {
 		NODE* node = &scene->nodes[i];
+		current_node = node;
 		if(node->mesh_count > 0 && node->enabled == 1) {
 			int mesh_id = node->mesh_id / 2;
 
@@ -1783,6 +1985,9 @@ void CModel_render_nodes_i(CModel* scene, int node_idx, int render_mode)
 
 void CModel_render_nodes(CModel* scene, int node_idx)
 {
+	glMatrixMode(GL_MODELVIEW);
+	glPushMatrix();
+	glScalef(scene->scale, scene->scale, scene->scale);
 	glUseProgram(shader);
 
 	CModel_update_uniforms();
@@ -1817,6 +2022,9 @@ void CModel_render_nodes(CModel* scene, int node_idx)
 	glDisable(GL_BLEND);
 
 	glUseProgram(0);
+
+	glMatrixMode(GL_MODELVIEW);
+	glPopMatrix();
 }
 
 void CModel_render(CModel* scene)
