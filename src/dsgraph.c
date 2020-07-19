@@ -396,7 +396,6 @@ int main(int argc, char **argv)
 
 	GAMEInit();
 	CModel_init();
-	EntInitialize(28);
 	GAMESetRoom(room_id, layer_mask);
 
 	const char* name = get_current_room_name();

@@ -50,6 +50,8 @@ static const u16 item_scan_ids[NUM_PICKUP_MODELS] = {
 static CModel* pickup_models[NUM_PICKUP_MODELS] = { 0 };
 static CAnimation* pickup_animations[NUM_PICKUP_MODELS] = { 0 };
 
+static CModel* item_base_model = NULL;
+
 static void load_pickup(int id)
 {
 	char filename[256];
@@ -70,29 +72,6 @@ static void load_pickup(int id)
 	}
 }
 
-////////////////////////////////////////////////////////////////////////////////
-// normal items
-////////////////////////////////////////////////////////////////////////////////
-static void CItem_dump(CItem* item)
-{
-	printf("CItem [%s]\n", pickup_model_names[item->model_id]);
-	printf("field_0C=0x%x [%f]\n", item->item->field_C,  FX_FX32_TO_F32(item->item->field_C));
-	printf("field_10=0x%x [%f]\n", item->item->field_10, FX_FX32_TO_F32(item->item->field_10));
-	printf("field_14=0x%x [%f]\n", item->item->field_14, FX_FX32_TO_F32(item->item->field_14));
-	printf("field_18=0x%x [%f]\n", item->item->field_18, FX_FX32_TO_F32(item->item->field_18));
-	printf("field_1C=0x%x [%f]\n", item->item->field_1C, FX_FX32_TO_F32(item->item->field_1C));
-	printf("field_20=0x%x [%f]\n", item->item->field_20, FX_FX32_TO_F32(item->item->field_20));
-	printf("item_id=0x%x\n", item->item->item_id);
-	printf("id=0x%x\n", item->item->id);
-	printf("field_2C=0x%x [%f]\n", item->item->field_2C, FX_FX32_TO_F32(item->item->field_2C));
-	printf("field_30=0x%x [%f]\n", item->item->field_30, FX_FX32_TO_F32(item->item->field_30));
-	printf("field_34=0x%x [%f]\n", item->item->field_34, FX_FX32_TO_F32(item->item->field_34));
-	printf("field_38=0x%x [%f]\n", item->item->field_38, FX_FX32_TO_F32(item->item->field_38));
-	printf("field_3C=0x%x [%f]\n", item->item->field_3C, FX_FX32_TO_F32(item->item->field_3C));
-	printf("field_40=0x%x [%f]\n", item->item->field_40, FX_FX32_TO_F32(item->item->field_40));
-	printf("\n");
-}
-
 CEntity* CItem_construct(const char* node_name, EntityData* data)
 {
 	if(data->type != ITEM) {
@@ -101,24 +80,29 @@ CEntity* CItem_construct(const char* node_name, EntityData* data)
 
 	EntityItem* item = (EntityItem*)data;
 
-	printf("Item: %d [%s]\n", data->type, pickup_model_names[item->id]);
+	printf("Item: %d [%s], spawn delay: %d, max spawn count: %d\n", data->type, pickup_model_names[item->type], item->spawn_delay, item->max_spawn_count);
 
 	CItem* obj = (CItem*)alloc_from_heap(sizeof(CItem));
 	CEntityCtor(&obj->base, data);
 
-	load_pickup(item->id);
-	obj->model_id = item->id;
-	obj->base.scan_id = item_scan_ids[item->id];
+	load_pickup(item->type);
+	obj->model_id = item->type;
+	obj->base.scan_id = item_scan_ids[item->type];
 
 	obj->pos.x = FX_FX32_TO_F32(item->pos.x);
 	obj->pos.y = FX_FX32_TO_F32(item->pos.y);
 	obj->pos.z = FX_FX32_TO_F32(item->pos.z);
 
+	obj->enabled = item->enabled;
+	obj->has_base = item->has_base;
+	obj->max_spawn_count = item->max_spawn_count;
+	obj->spawn_interval = item->spawn_interval;
+	obj->spawn_delay = item->spawn_delay;
+
 	obj->item = item;
 	obj->rotation = (float)rand() / (float)RAND_MAX * 360.0;
 	printf("initial rotation: %f\n", obj->rotation);
 
-	CItem_dump(obj);
 	return (CEntity*)obj;
 }
 
@@ -145,32 +129,31 @@ void CItem_render(CEntity* obj)
 
 	float off = -pickup_models[self->model_id]->min_y + (sinf(self->rotation / 180.0 * M_PI) + 1.0) / 8.0f;
 
-	glMatrixMode(GL_MODELVIEW);
-	glPushMatrix();
+	if(self->has_base) {
+		glMatrixMode(GL_MODELVIEW);
+		glPushMatrix();
 
-#if 0
-	glDisable(GL_TEXTURE_2D);
-	glDisable(GL_CULL_FACE);
-	glBegin(GL_QUADS);
-	glColor4f(1, 0, 0, 1);
-	glVertex3f(self->pos.x - 0.5, self->pos.y, self->pos.z - 0.5);
-	glVertex3f(self->pos.x - 0.5, self->pos.y, self->pos.z + 0.5);
-	glVertex3f(self->pos.x + 0.5, self->pos.y, self->pos.z + 0.5);
-	glVertex3f(self->pos.x + 0.5, self->pos.y, self->pos.z - 0.5);
-	glEnd();
-	glEnable(GL_CULL_FACE);
-	glEnable(GL_TEXTURE_2D);
-	glColor4f(1, 1, 1, 1);
-#endif
+		glTranslatef(self->pos.x, self->pos.y, self->pos.z);
 
-	glTranslatef(self->pos.x, self->pos.y + off, self->pos.z);
+		CModel_render(item_base_model);
 
-	glRotatef(self->rotation, 0, 1, 0);
+		glMatrixMode(GL_MODELVIEW);
+		glPopMatrix();
+	}
 
-	CModel_render(pickup_models[self->model_id]);
+	if(self->enabled) {
+		glMatrixMode(GL_MODELVIEW);
+		glPushMatrix();
 
-	glMatrixMode(GL_MODELVIEW);
-	glPopMatrix();
+		glTranslatef(self->pos.x, self->pos.y + off, self->pos.z);
+
+		glRotatef(self->rotation, 0, 1, 0);
+
+		CModel_render(pickup_models[self->model_id]);
+
+		glMatrixMode(GL_MODELVIEW);
+		glPopMatrix();
+	}
 }
 
 Vec3* CItem_get_position(CEntity* obj)
@@ -199,4 +182,6 @@ void EntItemRegister(void)
 	ent->render = CItem_render;
 	ent->get_position = CItem_get_position;
 	// ent->set_tex_filter = CItem_set_tex_filter;
+
+	load_model(&item_base_model, "common/items_base_Model.bin", USE_ARCHIVE);
 }

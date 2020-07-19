@@ -36,7 +36,7 @@ typedef enum {
 	SECRET_SWITCH_TXTR = 0x1A,
 } SHARED_TEXTURE;
 
-const char* texture_container_names[NUM_TEXTURE_CONTAINERS];
+extern const char* texture_container_names[NUM_TEXTURE_CONTAINERS];
 extern CModel* texture_containers[NUM_TEXTURE_CONTAINERS];
 
 void load_texture_container(CModel* model, SHARED_TEXTURE id);

@@ -1,5 +1,7 @@
 #include "types.h"
 #include "game.h"
+#include "entity.h"
+#include "archive.h"
 #include "strings.h"
 #include "hud.h"
 #include "world.h"
@@ -11,6 +13,8 @@ void GAMEInit()
 {
 	game_state.game_mode = SINGLE_PLAYER;
 
+	LoadArchive("common", "archives/common.arc");
+
 	load_hud_messages();
 	load_game_messages();
 	load_weapon_names();
@@ -19,8 +23,9 @@ void GAMEInit()
 void GAMESetRoom(int room_id, unsigned int layer_mask)
 {
 	game_state.room_id = room_id;
-	room = load_room(&rooms[room_id], 0, 0, 0, layer_mask);
 	set_area_id();
+	EntInitialize(28);
+	room = load_room(&rooms[room_id], 0, 0, 0, layer_mask);
 	setup_room_portals();
 }
 

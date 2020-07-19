@@ -86,6 +86,9 @@ void EntInitialize(int size)
 	EntJumpPadRegister();
 	EntItemRegister();
 	EntObjectRegister();
+	EntTeleporterRegister();
+	EntAlimbicDoorRegister();
+	EntPlatformRegister();
 }
 
 void CEntityCtor(CEntity* entity, EntityData* data)

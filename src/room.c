@@ -1,6 +1,8 @@
 #include <GL/gl.h>
 #include <GL/glext.h>
 
+#include <stdlib.h>
+
 #include "types.h"
 #include "heap.h"
 #include "room.h"
@@ -110,7 +112,6 @@ void CRoom_render(CRoom* room)
 	glMatrixMode(GL_MODELVIEW);
 	glPushMatrix();
 	glTranslatef(FX_FX32_TO_F32(room->pos.x), FX_FX32_TO_F32(room->pos.y), FX_FX32_TO_F32(room->pos.z));
-	glScalef(room->model->scale, room->model->scale, room->model->scale);
 	CRoom_setLights(room);
 	CModel_setFog(room->description->fog_enable, fogcolor, room->description->fog_offset);
 	for(ref = room->room_nodes; ref; ref = ref->next)
