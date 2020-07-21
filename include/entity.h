@@ -166,6 +166,19 @@ typedef struct {
 	u32		type;
 } EntityPlatform;
 
+typedef struct {
+	EntityData	header;
+
+	VecFx32		pos;
+	VecFx32		vec1;
+	VecFx32		vec2;
+
+	u32		type;
+	fx32		width;
+	fx32		height;
+	u32		spawn;
+} EntityForceField;
+
 struct CEntity;
 typedef struct CEntity CEntity;
 
@@ -247,6 +260,17 @@ typedef struct {
 	u32		flags;
 } CPlatform;
 
+typedef struct {
+	CEntity		base;
+	EntityForceField* ent;
+	Vec3		pos;
+	Mtx44		transform;
+	CModel*		model;
+	int		type;
+	u32		flags;
+	float		alpha;
+} CForceField;
+
 extern Entity* entities;
 
 void		EntLoad(Entity** ent, const char* filename, int layer_id);
@@ -266,6 +290,7 @@ void		EntObjectRegister(void);
 void		EntTeleporterRegister(void);
 void		EntAlimbicDoorRegister(void);
 void		EntPlatformRegister(void);
+void		EntForceFieldRegister(void);
 
 void		get_transform_mtx(Mtx44* mtx, VecFx32* vec1, VecFx32* vec2);
 

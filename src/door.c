@@ -14,7 +14,7 @@
 
 #define	NUM_DOORS 4
 
-static const char door_palette_ids[10] = { 0, 1, 2, 7, 6, 3, 4, 5, 0, 0 };
+const char door_palette_ids[10] = { 0, 1, 2, 7, 6, 3, 4, 5, 0, 0 };
 
 static const char* alimbic_door_locks[NUM_DOORS] = {
 		"models/AlimbicDoorLock_mdl_Model.bin",
@@ -53,7 +53,7 @@ static CModel* alimbic_door_models[NUM_DOORS] = { 0 };
 static CAnimation* alimbic_door_animations[NUM_DOORS] = { 0 };
 static CModel* alimbic_door_lock_models[NUM_DOORS] = { 0 };
 static CAnimation* alimbic_door_lock_animations[NUM_DOORS] = { 0 };
-static CModel* alimbic_palettes_model = NULL;
+CModel* alimbic_palettes_model = NULL;
 
 void load_alimbic_doors(int type)
 {

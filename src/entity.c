@@ -89,6 +89,7 @@ void EntInitialize(int size)
 	EntTeleporterRegister();
 	EntAlimbicDoorRegister();
 	EntPlatformRegister();
+	EntForceFieldRegister();
 }
 
 void CEntityCtor(CEntity* entity, EntityData* data)

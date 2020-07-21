@@ -66,8 +66,7 @@ enum RENDER_MODE {
 	DECAL = 1,
 	TRANSLUCENT = 2,
 	// viewer only, not stored in a file
-	ALPHA_TEST = 3,
-	HIDDEN = 4
+	ALPHA_TEST = 3
 };
 
 typedef struct {
@@ -537,17 +536,6 @@ static TEXOVERRIDE mtl_overrides[NUM_OVERRIDES] = {
 	/* stronghold void */
 	{ "fire_pit", 0xF25B969A, -1, -1, 1 },
 	{ "roof", 0xEC5CFB0F, -1, -1, 1 }
-};
-
-typedef struct {
-	char	name[64];
-	u32	checksum;
-} TEXHIDE;
-
-#define	NUM_HIDDEN	1
-
-static TEXHIDE mtl_hidden[NUM_HIDDEN] = {
-	{ "blinn2", 0x73F75D53 }
 };
 
 static void update_bounds(CModel* scene, float vtx_state[3])
@@ -1104,14 +1092,6 @@ static void make_textures(CModel* model)
 			}
 		}
 
-		// TODO: this is a hack to hide broken things
-		for(u32 n = 0; n < NUM_HIDDEN; n++) {
-			TEXHIDE* hide = &mtl_hidden[n];
-			if(hide->checksum == hash) {
-				// mat->render_mode = HIDDEN;
-			}
-		}
-
 		glBindTexture(GL_TEXTURE_2D, 0);
 		free(image);
 	}
@@ -1365,6 +1345,7 @@ CModel* CModel_load(u8* scenedata, unsigned int scenesize, u8* texturedata, unsi
 			mat->scale_t = FX_FX32_TO_F32(get32bit_LE((u8*)&m->scale_t));
 			mat->translate_s = FX_FX32_TO_F32(get32bit_LE((u8*)&m->translate_s));
 			mat->translate_t = FX_FX32_TO_F32(get32bit_LE((u8*)&m->translate_t));
+			mat->rot_z = FX_FX32_TO_F32(FX_IDX_TO_RAD(get16bit_LE((u8*)&m->rot_z)));
 			mat->diffuse = m->diffuse;
 			mat->ambient = m->ambient;
 			mat->specular = m->specular;
@@ -1680,7 +1661,9 @@ void CModel_render_mesh(CModel* scene, int mesh_id)
 		} else if(material->texgen_mode != GX_TEXGEN_NONE && scene->texture_matrices) {
 			glLoadMatrixf(scene->texture_matrices[material->matrix_id].a);
 		} else if(material->texgen_mode) {
-			glTranslatef(material->translate_s, material->translate_t, 0.0f);
+			if(material->rot_z != 0)
+				glRotatef(material->rot_z / M_PI * 180.0, 0, 0, 1);
+			glTranslatef(material->translate_s * texture->width, material->translate_t * texture->height, 0.0f);
 			glScalef(material->scale_s, material->scale_t, 1.0f);
 			glScalef(1.0f / texture->width, 1.0f / texture->height, 1.0f);
 		} else {

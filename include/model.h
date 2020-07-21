@@ -68,6 +68,7 @@ typedef struct {
 	float				scale_t;
 	float				translate_s;
 	float				translate_t;
+	float				rot_z;
 	unsigned int			alpha;
 	unsigned int			texid;
 	unsigned int			palid;
