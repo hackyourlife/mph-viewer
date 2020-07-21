@@ -49,19 +49,18 @@ typedef struct {
 } MaterialAnimationGroup;
 
 typedef struct {
-	u32	frame_count;
-	u32	field_4;
+	u16 frame_count;
+	u16 frame_index_count;
+	u16 tex_id_count;
+	u16 pal_id_count;
 	u16	anim_count;
 	u16	field_A;
-	u32	frame_data; // u16*
-	u32	texids; // u16*
-	u32	pals; // u16*
+	u32	frame_indices; // u16*
+	u32	tex_ids; // u16*
+	u32	pal_ids; // u16*
 	u32	animations; // TextureAnimation*
 	u16	anim_frame;
 	u16	field_1E;
-	u32	field_20;
-	u32	field_24;
-	u32	field_28;
 } TextureAnimationGroup;
 
 typedef struct {
@@ -76,7 +75,7 @@ typedef struct {
 } TexcoordAnimationGroup;
 
 typedef struct {
-	u32	data;
+	u32	frame_count;
 	u32	fx32_ptr; // u32*
 	u32	short_ptr; // u16*
 	u32	int_ptr; // u32*
