@@ -282,7 +282,7 @@ void main() \n\
 	} \n\
 	if(use_light) { \n\
 		// light 1 \n\
-		float fixed_diffuse1 = dot(light1vec.xyz, gl_Normal); \n\
+		float fixed_diffuse1 = dot(-light1vec.xyz, gl_Normal); \n\
 		vec3 neghalf1 = -(light1vec.xyz / 2.0); \n\
 		float d1 = dot(neghalf1, gl_Normal); \n\
 		float fixed_shininess1 = d1 > 0.0 ? 2.0 * d1 * d1 : 0.0; \n\
@@ -291,7 +291,7 @@ void main() \n\
 		vec4 amb1 = ambient * light1col; \n\
 		vec4 col1 = spec1 + diff1 + amb1; \n\
 		// light 2 \n\
-		float fixed_diffuse2 = dot(light2vec.xyz, gl_Normal); \n\
+		float fixed_diffuse2 = dot(-light2vec.xyz, gl_Normal); \n\
 		vec3 neghalf2 = -(light2vec.xyz / 2.0); \n\
 		float d2 = dot(neghalf2, gl_Normal); \n\
 		float fixed_shininess2 = d2 > 0.0 ? 2.0 * d2 * d2 : 0.0; \n\
@@ -299,7 +299,10 @@ void main() \n\
 		vec4 diff2 = diffuse * light2col * fixed_diffuse2; \n\
 		vec4 amb2 = ambient * light2col; \n\
 		vec4 col2 = spec2 + diff2 + amb2; \n\
-		color = gl_Color + col1 + col2; \n\
+		float cr = min(col1.r + col2.r, 1.0); \n\
+		float cg = min(col1.g + col2.g, 1.0); \n\
+		float cb = min(col1.b + col2.b, 1.0); \n\
+		color = vec4(cr, cg, cb, 1.0); \n\
 	} else { \n\
 		color = gl_Color; \n\
 	} \n\
@@ -1646,7 +1649,9 @@ void CModel_render_mesh(CModel* scene, int mesh_id)
 	MATERIAL* material = &scene->materials[mesh->matid];
 	TEXTURE* texture = &scene->textures[material->texid];
 
-	glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+	float diff[4] = { material->diffuse.r / 31.0f, material->diffuse.g / 31.0f, material->diffuse.b / 31.0f, 1.0f };
+
+	glColor4f(diff[0], diff[1], diff[2], 1.0f);
 
 	if(material->texid != 0xFFFF) {
 		glBindTexture(GL_TEXTURE_2D, material->tex);
@@ -1677,9 +1682,8 @@ void CModel_render_mesh(CModel* scene, int mesh_id)
 	}
 
 	if(lighting && material->light) {
-		float amb[4] = { (float)material->ambient.r / 255.0f, (float)material->ambient.g / 255.0f, (float)material->ambient.b / 255.0f, 1.0f };
-		float diff[4] = { material->diffuse.r / 255.0f, material->diffuse.g / 255.0f, material->diffuse.b / 255.0f, 1.0f };
-		float spec[4] = { material->specular.r / 255.0f, material->specular.g / 255.0f, material->specular.b / 255.0f, 1.0f };
+		float amb[4] = { (float)material->ambient.r / 31.0f, (float)material->ambient.g / 31.0f, (float)material->ambient.b / 31.0f, 1.0f };
+		float spec[4] = { material->specular.r / 31.0f, material->specular.g / 31.0f, material->specular.b / 31.0f, 1.0f };
 		//if(amb[0] != 0)
 		//	printf("amb: [%d] %f,%f,%f,%f\n", material->ambient.r, amb[0], amb[1], amb[2], amb[3]);
 		glEnable(GL_LIGHTING);
