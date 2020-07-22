@@ -282,7 +282,7 @@ void main() \n\
 	} \n\
 	if(use_light) { \n\
 		// light 1 \n\
-		float fixed_diffuse1 = dot(-light1vec.xyz, gl_Normal); \n\
+		float fixed_diffuse1 = clamp(dot(-light1vec.xyz, gl_Normal), 0.0, 1.0); \n\
 		vec3 neghalf1 = -(light1vec.xyz / 2.0); \n\
 		float d1 = dot(neghalf1, gl_Normal); \n\
 		float fixed_shininess1 = d1 > 0.0 ? 2.0 * d1 * d1 : 0.0; \n\
@@ -291,7 +291,7 @@ void main() \n\
 		vec4 amb1 = ambient * light1col; \n\
 		vec4 col1 = spec1 + diff1 + amb1; \n\
 		// light 2 \n\
-		float fixed_diffuse2 = dot(-light2vec.xyz, gl_Normal); \n\
+		float fixed_diffuse2 = clamp(dot(-light2vec.xyz, gl_Normal), 0.0, 1.0); \n\
 		vec3 neghalf2 = -(light2vec.xyz / 2.0); \n\
 		float d2 = dot(neghalf2, gl_Normal); \n\
 		float fixed_shininess2 = d2 > 0.0 ? 2.0 * d2 * d2 : 0.0; \n\
