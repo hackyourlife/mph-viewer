@@ -273,6 +273,19 @@ uniform float far_plane; \n\
 varying vec2 texcoord; \n\
 varying vec4 color; \n\
 \n\
+vec4 light_calc(vec4 light_vec, vec4 light_col, vec3 normal_vec, vec4 dif_col, vec4 amb_col, vec4 spe_col) \n\
+{ \n\
+	vec3 sight_vec = vec3(0.0, 0.0, -1.0); \n\
+	float dif_factor = max(0.0, -dot(light_vec.xyz, normal_vec)); \n\
+	vec3 half_vec = (light_vec.xyz + sight_vec) / 2.0; \n\
+	float spe_factor = max(0.0, dot(-half_vec, normal_vec)); \n\
+	spe_factor = spe_factor * spe_factor; \n\
+	vec4 spe_out = spe_col * light_col * spe_factor; \n\
+	vec4 dif_out = dif_col * light_col * dif_factor; \n\
+	vec4 amb_out = amb_col * light_col; \n\
+	return spe_out + dif_out + amb_out; \n\
+} \n\
+\n\
 void main() \n\
 { \n\
 	if(is_billboard) { \n\
@@ -281,28 +294,9 @@ void main() \n\
 		gl_Position = gl_ModelViewProjectionMatrix * gl_Vertex; \n\
 	} \n\
 	if(use_light) { \n\
-		// light 1 \n\
-		float fixed_diffuse1 = clamp(dot(-light1vec.xyz, gl_Normal), 0.0, 1.0); \n\
-		vec3 neghalf1 = -(light1vec.xyz / 2.0); \n\
-		float d1 = dot(neghalf1, gl_Normal); \n\
-		float fixed_shininess1 = d1 > 0.0 ? 2.0 * d1 * d1 : 0.0; \n\
-		vec4 spec1 = specular * light1col * fixed_shininess1; \n\
-		vec4 diff1 = diffuse * light1col * fixed_diffuse1; \n\
-		vec4 amb1 = ambient * light1col; \n\
-		vec4 col1 = spec1 + diff1 + amb1; \n\
-		// light 2 \n\
-		float fixed_diffuse2 = clamp(dot(-light2vec.xyz, gl_Normal), 0.0, 1.0); \n\
-		vec3 neghalf2 = -(light2vec.xyz / 2.0); \n\
-		float d2 = dot(neghalf2, gl_Normal); \n\
-		float fixed_shininess2 = d2 > 0.0 ? 2.0 * d2 * d2 : 0.0; \n\
-		vec4 spec2 = specular * light2col * fixed_shininess2; \n\
-		vec4 diff2 = diffuse * light2col * fixed_diffuse2; \n\
-		vec4 amb2 = ambient * light2col; \n\
-		vec4 col2 = spec2 + diff2 + amb2; \n\
-		float cr = min(col1.r + col2.r, 1.0); \n\
-		float cg = min(col1.g + col2.g, 1.0); \n\
-		float cb = min(col1.b + col2.b, 1.0); \n\
-		color = vec4(cr, cg, cb, 1.0); \n\
+		vec4 col1 = light_calc(light1vec, light1col, gl_Normal, diffuse, ambient, specular); \n\
+		vec4 col2 = light_calc(light2vec, light2col, gl_Normal, diffuse, ambient, specular); \n\
+		color = vec4(min((col1 + col2).rgb, vec3(1.0, 1.0, 1.0)), 1.0); \n\
 	} else { \n\
 		color = gl_Color; \n\
 	} \n\
