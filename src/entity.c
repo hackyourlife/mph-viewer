@@ -90,6 +90,7 @@ void EntInitialize(int size)
 	EntAlimbicDoorRegister();
 	EntPlatformRegister();
 	EntForceFieldRegister();
+	EntArtifactRegister();
 }
 
 void CEntityCtor(CEntity* entity, EntityData* data)
@@ -161,7 +162,7 @@ static void CEntity_create(const char* name, EntityData* entity)
 	}
 }
 
-void CEntity_initialize(Entity* entities, NODE* node)
+void CEntity_initialize(Entity* entities, CNode* node)
 {
 	for(Entity* ent = entities; ent->data; ent++) {
 		if(ent->data)
@@ -188,6 +189,11 @@ void CEntity_process_all(float dt)
 			CEntity_process(ent, dt);
 		}
 	}
+}
+
+CEntity* CEntity_get_instances(int type)
+{
+	return instances[type];
 }
 
 void EntSetTextureFilter(int type)

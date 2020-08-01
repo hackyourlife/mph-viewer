@@ -10,11 +10,18 @@ enum ENTITY_TYPE {
 	ITEM_INSTANCE = 0x5,
 	ENEMY = 0x6,
 	JUMP_PAD = 0x9,
+	CAMERA_POS = 0x0B,
+	OCTOLITH = 0x0C,
+	FLAG_BASE = 0x0D,
 	TELEPORTER = 0xE,
+	DEFENSE_NODE = 0x0F,
+	LIGHT_SOURCE = 0x10,
 	ARTIFACT = 0x11,
 	CAMERA_SEQ = 0x12,
 	FORCE_FIELD = 0x13,
+	BEAM = 0x15,
 	ENEMY_INSTANCE = 0x17,
+	PLAYER = 0x19,
 	ENERGY_BEAM = 0x1A
 };
 
@@ -179,6 +186,19 @@ typedef struct {
 	u32		spawn;
 } EntityForceField;
 
+typedef struct {
+	EntityData	header;
+
+	VecFx32		pos;
+	VecFx32		vec1;
+	VecFx32		vec2;
+
+	u8		model_id;
+	u8		artifact_id;
+	u8		trigger;
+	u8		has_base;
+} EntityArtifact;
+
 struct CEntity;
 typedef struct CEntity CEntity;
 
@@ -271,6 +291,18 @@ typedef struct {
 	float		alpha;
 } CForceField;
 
+typedef struct {
+	CEntity		base;
+	EntityArtifact*	ent;
+	Vec3		pos;
+	Mtx44		base_transform;
+	Mtx44		transform;
+	int		has_base;
+	int		artifact_id;
+	int		model_id;
+	float		rotation;
+} CArtifact;
+
 extern Entity* entities;
 
 void		EntLoad(Entity** ent, const char* filename, int layer_id);
@@ -280,9 +312,10 @@ void		CEntityCtor(CEntity* entity, EntityData* data);
 
 void		EntSetTextureFilter(int type);
 
-void		CEntity_initialize(Entity* entities, NODE* node);
+void		CEntity_initialize(Entity* entities, CNode* node);
 void		CEntity_process_all(float dt);
 void		CEntity_render_all(void);
+CEntity*	CEntity_get_instances(int type);
 
 void		EntJumpPadRegister(void);
 void		EntItemRegister(void);
@@ -291,7 +324,12 @@ void		EntTeleporterRegister(void);
 void		EntAlimbicDoorRegister(void);
 void		EntPlatformRegister(void);
 void		EntForceFieldRegister(void);
+void		EntArtifactRegister(void);
 
 void		get_transform_mtx(Mtx44* mtx, VecFx32* vec1, VecFx32* vec2);
+
+float		CItem_get_y(fx32 y);
+void		CForceField_set_state(CEntity* obj, int state);
+
 
 #endif

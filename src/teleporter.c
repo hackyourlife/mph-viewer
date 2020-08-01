@@ -116,14 +116,7 @@ void CTeleporter_render(CEntity* obj)
 	if(!self->model)
 		return;
 
-	glMatrixMode(GL_MODELVIEW);
-	glPushMatrix();
-	glMultMatrixf(self->transform.a);
-
-	CModel_render_all(self->model);
-
-	glMatrixMode(GL_MODELVIEW);
-	glPopMatrix();
+	CModel_render_all(self->model, &self->transform, 1.0);
 }
 
 Vec3* CTeleporter_get_position(CEntity* obj)

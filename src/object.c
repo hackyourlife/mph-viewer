@@ -77,7 +77,7 @@ static int loaded[NUM_OBJECTS];
 
 void link_model(CModel* model, SHARED_TEXTURE container_id, int copy_textures)
 {
-	TEXTURE* tex = model->textures;
+	CTexture* tex = model->textures;
 	unsigned int texcnt = model->num_textures;
 
 	if(!texture_containers[container_id])
@@ -217,14 +217,7 @@ void CObject_render(CEntity* obj)
 	if(self->object_id == -1)
 		return;
 
-	glMatrixMode(GL_MODELVIEW);
-	glPushMatrix();
-	glMultMatrixf(self->transform.a);
-
-	CModel_render_all(object_model[self->object_id]);
-
-	glMatrixMode(GL_MODELVIEW);
-	glPopMatrix();
+	CModel_render_all(object_model[self->object_id], &self->transform, 1.0);
 }
 
 Vec3* CObject_get_position(CEntity* obj)

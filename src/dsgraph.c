@@ -57,6 +57,8 @@ bool key_down_speed = false;
 bool is_fullscreen = false;
 
 bool fog_disable = false;
+bool show_entities = true;
+bool force_fields_active = true;
 
 void move_forward(float distance)
 {
@@ -212,6 +214,21 @@ void kb_func(unsigned char key, int x, int y)
 		}
 		break;
 
+		case 'e':	case 'E': {
+			show_entities = !show_entities;
+			glutPostRedisplay();
+		}
+		break;
+
+		case 'p':	case 'P': {
+			force_fields_active = !force_fields_active;
+			for(CEntity* ent = CEntity_get_instances(FORCE_FIELD); ent; ent = ent->next) {
+				CForceField_set_state(ent, force_fields_active ? 1 : 0);
+			}
+			glutPostRedisplay();
+		}
+		break;
+
 		case ' ':
 			key_down_speed = true;
 			break;
@@ -251,36 +268,13 @@ void display_func(void)
 {
 	process();
 
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
 	GLfloat vp[4];
 	glGetFloatv(GL_VIEWPORT, vp);
 	float aspect = (vp[2] - vp[0]) / (vp[3] - vp[1]);
 
-	float size_x = fabsf(room->model->max_x - room->model->min_x);
-	float size_y = fabsf(room->model->max_y - room->model->min_y);
-	float size_z = fabsf(room->model->max_z - room->model->min_z);
-	float size = size_x;
-	if(size_y > size) {
-		size = size_y;
-	}
-	if(size_z > size) {
-		size = size_z;
-	}
-
-	glMatrixMode(GL_PROJECTION);
-	glLoadIdentity();
-	gluPerspective(80.0f, aspect, 0.05f, 2 * size * room->model->scale);
-
-	glMatrixMode(GL_MODELVIEW);
-	glLoadIdentity();
-
-	glRotatef(xrot, 1, 0, 0);
-	glRotatef(360.0f - yrot, 0, 1, 0);
-	glTranslatef(-pos_x, -pos_y, -pos_z);
-
-	CRoom_render(room);
-	CEntity_render_all();
+	GAMERenderScene(aspect);
 
 	glutSwapBuffers();
 }
@@ -334,7 +328,7 @@ int main(int argc, char **argv)
 	}
 
 	glutInit(&argc, argv);
-	glutInitDisplayMode(GLUT_RGBA | GLUT_DEPTH | GLUT_DOUBLE);
+	glutInitDisplayMode(GLUT_RGBA | GLUT_DEPTH | GLUT_STENCIL | GLUT_DOUBLE);
 	if(modestring) {
 		glutGameModeString(modestring);
 		int possible = glutGameModeGet(GLUT_GAME_MODE_POSSIBLE);
@@ -371,7 +365,7 @@ int main(int argc, char **argv)
 	printf("GL Version:   %s\n", gl_version);
 	printf("GLSL Version: %s\n", gl_glsl_version);
 
-	printf("using depth buffer with %d bit\n", glutGet(GLUT_WINDOW_DEPTH_SIZE));
+	printf("using depth buffer with %d bit and stencil buffer with %d bit\n", glutGet(GLUT_WINDOW_DEPTH_SIZE), glutGet(GLUT_WINDOW_STENCIL_SIZE));
 
 	glutDisplayFunc(display_func);
 	glutIdleFunc(display_func);
@@ -389,10 +383,10 @@ int main(int argc, char **argv)
 	glDepthFunc(GL_LEQUAL);
 
 	glClearColor(0.0, 0.0, 0.0, 0.0);
+	glClearStencil(0);
 
 	printf("loading room %d...\n", room_id);
 	printf("Room name: %s\n", rooms[room_id].name);
-	printf("root node: %s\n", rooms[room_id].room_node_name);
 
 	GAMEInit();
 	CModel_init();
@@ -412,6 +406,8 @@ int main(int argc, char **argv)
 	printf(" - W toggles wireframe\n");
 	printf(" - B toggles backface culling\n");
 	printf(" - F toggles texture filtering\n");
+	printf(" - G toggles fog\n");
+	printf(" - L toggles lighting\n");
 
 	glutMainLoop();
 

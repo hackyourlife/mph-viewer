@@ -126,10 +126,10 @@ CEntity* CAlimbicDoor_construct(const char* node_name, EntityData* data)
 	if(!type || type == 3) {
 		obj->model = (CModel*) alloc_from_heap(sizeof(CModel));
 		memcpy(obj->model, alimbic_door_models[type], sizeof(CModel));
-		obj->model->materials = (MATERIAL*) alloc_from_heap(sizeof(MATERIAL) * obj->model->num_materials);
-		memcpy(obj->model->materials, alimbic_door_models[type]->materials, sizeof(MATERIAL) * obj->model->num_materials);
-		obj->model->palettes = (PALETTE*) alloc_from_heap(sizeof(PALETTE) * obj->model->num_palettes);
-		memcpy(obj->model->palettes, alimbic_door_models[type]->palettes, sizeof(PALETTE) * obj->model->num_palettes);
+		obj->model->materials = (CMaterial*) alloc_from_heap(sizeof(CMaterial) * obj->model->num_materials);
+		memcpy(obj->model->materials, alimbic_door_models[type]->materials, sizeof(CMaterial) * obj->model->num_materials);
+		obj->model->palettes = (CPalette*) alloc_from_heap(sizeof(CPalette) * obj->model->num_palettes);
+		memcpy(obj->model->palettes, alimbic_door_models[type]->palettes, sizeof(CPalette) * obj->model->num_palettes);
 
 		int palid;
 		if(obj->flags & 2)
@@ -137,10 +137,10 @@ CEntity* CAlimbicDoor_construct(const char* node_name, EntityData* data)
 		else
 			palid = door_palette_ids[9];
 
-		memcpy(&obj->model->palettes[1], &alimbic_palettes_model->palettes[palid], sizeof(PALETTE));
+		memcpy(&obj->model->palettes[1], &alimbic_palettes_model->palettes[palid], sizeof(CPalette));
 
 		if(type == 3) {
-			memcpy(&obj->model->palettes[2], &alimbic_palettes_model->palettes[palid], sizeof(PALETTE));
+			memcpy(&obj->model->palettes[2], &alimbic_palettes_model->palettes[palid], sizeof(CPalette));
 		}
 
 		CModel_set_textures(obj->model);
@@ -167,14 +167,7 @@ void CAlimbicDoor_render(CEntity* obj)
 	if(!self->model)
 		return;
 
-	glMatrixMode(GL_MODELVIEW);
-	glPushMatrix();
-	glMultMatrixf(self->transform.a);
-
-	CModel_render_all(self->model);
-
-	glMatrixMode(GL_MODELVIEW);
-	glPopMatrix();
+	CModel_render_all(self->model, &self->transform, 1.0);
 }
 
 Vec3* CAlimbicDoor_get_position(CEntity* obj)

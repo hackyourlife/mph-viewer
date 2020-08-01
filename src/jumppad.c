@@ -120,22 +120,8 @@ void CJumpPad_render(CEntity* obj)
 {
 	CJumpPad* self = (CJumpPad*)obj;
 
-	glMatrixMode(GL_MODELVIEW);
-	glPushMatrix();
-	glMultMatrixf(self->base_mtx.a);
-
-	CModel_render(jump_pad_models[self->model_id]);
-
-	glMatrixMode(GL_MODELVIEW);
-	glPopMatrix();
-	glPushMatrix();
-
-	glMatrixMode(GL_MODELVIEW);
-	glMultMatrixf(self->beam_mtx.a);
-	CModel_render(jump_pad_beam_model);
-
-	glMatrixMode(GL_MODELVIEW);
-	glPopMatrix();
+	CModel_render_all(jump_pad_models[self->model_id], &self->base_mtx, 1.0);
+	CModel_render_all(jump_pad_beam_model, &self->beam_mtx, 1.0);
 }
 
 Vec3* CJumpPad_get_position(CEntity* obj)

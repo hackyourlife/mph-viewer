@@ -4,6 +4,7 @@
 #include <stdlib.h>
 
 #include "types.h"
+#include "mtx.h"
 #include "heap.h"
 #include "room.h"
 #include "animation.h"
@@ -57,7 +58,7 @@ CRoom* load_room(const RoomDescription* descr, fx32 x, fx32 y, fx32 z, int layer
 	}
 
 	if(descr->ent) {
-		int layer_id = 1;
+		int layer_id = 0;
 		sprintf(filename, "levels/entities/%s", descr->ent);
 		EntLoad(&entities, filename, layer_id);
 
@@ -67,7 +68,7 @@ CRoom* load_room(const RoomDescription* descr, fx32 x, fx32 y, fx32 z, int layer
 	// setup node refs
 	room->room_nodes = NULL;
 	for(i = 0; i < room->model->num_nodes; i++) {
-		NODE* node = &room->model->nodes[i];
+		CNode* node = &room->model->nodes[i];
 		if(node->name[0] == 'r' && node->name[1] == 'm') {
 			NodeRef* ref = (NodeRef*) malloc(sizeof(NodeRef));
 			ref->node_id = node->child;
@@ -108,16 +109,14 @@ void CRoom_setLights(CRoom* room)
 void CRoom_render(CRoom* room)
 {
 	NodeRef* ref;
+	Mtx44 mtx;
 	float fogcolor[4] = { COLOR_R(room->description->fog_color), COLOR_G(room->description->fog_color), COLOR_B(room->description->fog_color), 1 };
-	glMatrixMode(GL_MODELVIEW);
-	glPushMatrix();
-	glTranslatef(FX_FX32_TO_F32(room->pos.x), FX_FX32_TO_F32(room->pos.y), FX_FX32_TO_F32(room->pos.z));
+	MTX44Trans(&mtx, FX_FX32_TO_F32(room->pos.x), FX_FX32_TO_F32(room->pos.y), FX_FX32_TO_F32(room->pos.z));
 	CRoom_setLights(room);
 	CModel_setFog(room->description->fog_enable, fogcolor, room->description->fog_offset);
-	for(ref = room->room_nodes; ref; ref = ref->next)
-		CModel_render_nodes(room->model, ref->node_id);
-	glMatrixMode(GL_MODELVIEW);
-	glPopMatrix();
+	for(ref = room->room_nodes; ref; ref = ref->next) {
+		CModel_render_node(room->model, &mtx, ref->node_id, 1.0);
+	}
 }
 
 void CRoom_process(CRoom* room, float dt)

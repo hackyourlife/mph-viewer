@@ -8,6 +8,7 @@
 #include "animation.h"
 #include "heap.h"
 #include "endianess.h"
+#include "model.h"
 
 typedef struct {
 	u32	frame_count;
@@ -49,15 +50,15 @@ typedef struct {
 } MaterialAnimationGroup;
 
 typedef struct {
-	u16 frame_count;
-	u16 frame_index_count;
-	u16 tex_id_count;
-	u16 pal_id_count;
+	u16	frame_count;
+	u16	frame_index_count;
+	u16	texid_count;
+	u16	palid_count;
 	u16	anim_count;
 	u16	field_A;
 	u32	frame_indices; // u16*
-	u32	tex_ids; // u16*
-	u32	pal_ids; // u16*
+	u32	texids; // u16*
+	u32	palids; // u16*
 	u32	animations; // TextureAnimation*
 	u16	anim_frame;
 	u16	field_1E;
@@ -95,44 +96,44 @@ typedef struct {
 typedef struct {
 	char	material_name[64];
 	u32	field_40;
-	u8	diffuse_r_blend_factor;
-	u8	diffuse_g_blend_factor;
-	u8	diffuse_b_blend_factor;
+	u8	diffuse_r_blend;
+	u8	diffuse_g_blend;
+	u8	diffuse_b_blend;
 	u8	field_47;
-	u16	diffuse_r_lut_length;
-	u16	diffuse_g_lut_length;
-	u16	diffuse_b_lut_length;
-	u16	diffuse_r_lut_start_idx;
-	u16	diffuse_g_lut_start_idx;
-	u16	diffuse_b_lut_start_idx;
-	u8	ambient_r_blend_factor;
-	u8	ambient_g_blend_factor;
-	u8	ambient_b_blend_factor;
+	u16	diffuse_r_lut_len;
+	u16	diffuse_g_lut_len;
+	u16	diffuse_b_lut_len;
+	u16	diffuse_r_lut_idx;
+	u16	diffuse_g_lut_idx;
+	u16	diffuse_b_lut_idx;
+	u8	ambient_r_blend;
+	u8	ambient_g_blend;
+	u8	ambient_b_blend;
 	u8	field_57;
-	u16	ambient_r_lut_length;
-	u16	ambient_g_lut_length;
-	u16	ambient_b_lut_length;
-	u16	ambient_r_lut_start_idx;
-	u16	ambient_g_lut_start_idx;
-	u16	ambient_b_lut_start_idx;
-	u8	specular_r_blend_factor;
-	u8	specular_g_blend_factor;
-	u8	specular_b_blend_factor;
+	u16	ambient_r_lut_len;
+	u16	ambient_g_lut_len;
+	u16	ambient_b_lut_len;
+	u16	ambient_r_lut_idx;
+	u16	ambient_g_lut_idx;
+	u16	ambient_b_lut_idx;
+	u8	specular_r_blend;
+	u8	specular_g_blend;
+	u8	specular_b_blend;
 	u8	field_67;
-	u16	specular_r_lut_length;
-	u16	specular_g_lut_length;
-	u16	specular_b_lut_length;
-	u16	specular_r_lut_start_idx;
-	u16	specular_g_lut_start_idx;
-	u16	specular_b_lut_start_idx;
+	u16	specular_r_lut_len;
+	u16	specular_g_lut_len;
+	u16	specular_b_lut_len;
+	u16	specular_r_lut_idx;
+	u16	specular_g_lut_idx;
+	u16	specular_b_lut_idx;
 	u32	field_74;
 	u32	field_78;
 	u32	field_7C;
 	u32	field_80;
-	u8	alpha_blend_factor;
+	u8	alpha_blend;
 	u8	field_85;
-	u16	alpha_lut_length;
-	u16	alpha_lut_start_idx;
+	u16	alpha_lut_len;
+	u16	alpha_lut_idx;
 	u16	material_id;
 } MaterialAnimation;
 
@@ -202,6 +203,7 @@ typedef struct {
 
 CAnimation* parse_animation(Animation *animation, CModel *model);
 void parse_texcoord_animation(CModel* model, CTexcoordAnimationGroup* animation_group);
+void parse_material_animation(CModel* model, CMaterialAnimationGroup* animation_group);
 
 void load_animation(CAnimation** animation, const char* filename, CModel* model, char flags)
 {
@@ -224,16 +226,17 @@ CAnimation* parse_animation(Animation* animation, CModel* model)
 	CAnimation* anim = (CAnimation*) alloc_from_heap(sizeof(CAnimation));
 	memset(anim, 0, sizeof(CAnimation));
 
-	NodeAnimationGroup**		node_animations		= (NodeAnimationGroup**)	((uintptr_t)animation + (uintptr_t)get32bit_LE((u8*)&animation->node_animations));
-	MaterialAnimationGroup**	material_animations	= (MaterialAnimationGroup**)	((uintptr_t)animation + (uintptr_t)get32bit_LE((u8*)&animation->material_animations));
-	TexcoordAnimationGroup**	texcoord_animations	= (TexcoordAnimationGroup**)	((uintptr_t)animation + (uintptr_t)get32bit_LE((u8*)&animation->texcoord_animations));
-	TextureAnimationGroup**		texture_animations	= (TextureAnimationGroup**)	((uintptr_t)animation + (uintptr_t)get32bit_LE((u8*)&animation->texture_animations));
+	u32*	node_animations		= (u32*) ((uintptr_t)animation + (uintptr_t)get32bit_LE((u8*)&animation->node_animations));
+	u32*	material_animations	= (u32*) ((uintptr_t)animation + (uintptr_t)get32bit_LE((u8*)&animation->material_animations));
+	u32*	texcoord_animations	= (u32*) ((uintptr_t)animation + (uintptr_t)get32bit_LE((u8*)&animation->texcoord_animations));
+	u32*	texture_animations	= (u32*) ((uintptr_t)animation + (uintptr_t)get32bit_LE((u8*)&animation->texture_animations));
 
 	anim->count = get16bit_LE((u8*)&animation->count);
 
 	printf("%d animation groups\n", anim->count);
 
 	anim->texcoord_animations = (CTexcoordAnimationGroup**) alloc_from_heap(anim->count * sizeof(CTexcoordAnimationGroup*));
+	anim->material_animations = (CMaterialAnimationGroup**) alloc_from_heap(anim->count * sizeof(CMaterialAnimationGroup*));
 	for(i = 0; i < anim->count; i++) {
 		if(texcoord_animations[i]) {
 			int maxscale = 0;
@@ -266,7 +269,7 @@ CAnimation* parse_animation(Animation* animation, CModel* model)
 				TexcoordAnimation* raw_anim = &raw_texcoord_anims[j];
 				CTexcoordAnimation* animation = &texcoord_anims->animations[j];
 
-				strcpy(animation->material_name, raw_anim->material_name);
+				memcpy(animation->material_name, raw_anim->material_name, 64);
 				animation->scale_s_blend = raw_anim->scale_s_blend;
 				animation->scale_t_blend = raw_anim->scale_t_blend;
 				animation->scale_s_len = get16bit_LE((u8*)&raw_anim->scale_s_lut_len);
@@ -306,10 +309,104 @@ CAnimation* parse_animation(Animation* animation, CModel* model)
 				texcoord_anims->translations[j] = FX_FX32_TO_F32(translations[j]);
 
 			texcoord_anims->time = 0;
-
-			parse_texcoord_animation(model, texcoord_anims);
 		} else {
 			anim->texcoord_animations[i] = NULL;
+		}
+
+		if(material_animations[i]) {
+			int maxcolor = 0;
+			int j;
+
+			MaterialAnimationGroup* raw_material_anim_group = (MaterialAnimationGroup*) ((uintptr_t)animation + (uintptr_t)get32bit_LE((u8*)&material_animations[i]));
+			MaterialAnimation* raw_material_anims = (MaterialAnimation*) ((uintptr_t)animation + (uintptr_t)get32bit_LE((u8*)&raw_material_anim_group->animations));
+			CMaterialAnimationGroup* material_anims = (CMaterialAnimationGroup*) alloc_from_heap(sizeof(CMaterialAnimationGroup));
+
+			anim->material_animations[i] = material_anims;
+
+			u8* color_lut = (u8*) ((uintptr_t)animation + (uintptr_t)get32bit_LE((u8*)&raw_material_anim_group->color_lut));
+
+			material_anims->frame_count = get32bit_LE((u8*)&raw_material_anim_group->frame_count);
+			material_anims->current_frame = get16bit_LE((u8*)&raw_material_anim_group->anim_frame);
+			material_anims->count = get32bit_LE((u8*)&raw_material_anim_group->anim_count);
+			material_anims->animations = (CMaterialAnimation*) alloc_from_heap(material_anims->count * sizeof(CMaterialAnimation));
+
+			for(j = 0; j < material_anims->count; j++) {
+				MaterialAnimation* raw_anim = &raw_material_anims[j];
+				CMaterialAnimation* animation = &material_anims->animations[j];
+
+				memcpy(animation->material_name, raw_anim->material_name, 64);
+				animation->diffuse_r_blend = raw_anim->diffuse_r_blend;
+				animation->diffuse_g_blend = raw_anim->diffuse_g_blend;
+				animation->diffuse_b_blend = raw_anim->diffuse_b_blend;
+				animation->diffuse_r_lut_len = get16bit_LE((u8*)&raw_anim->diffuse_r_lut_len);
+				animation->diffuse_g_lut_len = get16bit_LE((u8*)&raw_anim->diffuse_g_lut_len);
+				animation->diffuse_b_lut_len = get16bit_LE((u8*)&raw_anim->diffuse_b_lut_len);
+				animation->diffuse_r_lut_idx = get16bit_LE((u8*)&raw_anim->diffuse_r_lut_idx);
+				animation->diffuse_g_lut_idx = get16bit_LE((u8*)&raw_anim->diffuse_g_lut_idx);
+				animation->diffuse_b_lut_idx = get16bit_LE((u8*)&raw_anim->diffuse_b_lut_idx);
+				animation->ambient_r_blend = raw_anim->ambient_r_blend;
+				animation->ambient_g_blend = raw_anim->ambient_g_blend;
+				animation->ambient_b_blend = raw_anim->ambient_b_blend;
+				animation->ambient_r_lut_len = get16bit_LE((u8*)&raw_anim->ambient_r_lut_len);
+				animation->ambient_g_lut_len = get16bit_LE((u8*)&raw_anim->ambient_g_lut_len);
+				animation->ambient_b_lut_len = get16bit_LE((u8*)&raw_anim->ambient_b_lut_len);
+				animation->ambient_r_lut_idx = get16bit_LE((u8*)&raw_anim->ambient_r_lut_idx);
+				animation->ambient_g_lut_idx = get16bit_LE((u8*)&raw_anim->ambient_g_lut_idx);
+				animation->ambient_b_lut_idx = get16bit_LE((u8*)&raw_anim->ambient_b_lut_idx);
+				animation->specular_r_blend = raw_anim->specular_r_blend;
+				animation->specular_g_blend = raw_anim->specular_g_blend;
+				animation->specular_b_blend = raw_anim->specular_b_blend;
+				animation->specular_r_lut_len = get16bit_LE((u8*)&raw_anim->specular_r_lut_len);
+				animation->specular_g_lut_len = get16bit_LE((u8*)&raw_anim->specular_g_lut_len);
+				animation->specular_b_lut_len = get16bit_LE((u8*)&raw_anim->specular_b_lut_len);
+				animation->specular_r_lut_idx = get16bit_LE((u8*)&raw_anim->specular_r_lut_idx);
+				animation->specular_g_lut_idx = get16bit_LE((u8*)&raw_anim->specular_g_lut_idx);
+				animation->specular_b_lut_idx = get16bit_LE((u8*)&raw_anim->specular_b_lut_idx);
+				animation->alpha_blend = raw_anim->alpha_blend;
+				animation->alpha_lut_len = get16bit_LE((u8*)&raw_anim->alpha_lut_len);
+				animation->alpha_lut_idx = get16bit_LE((u8*)&raw_anim->alpha_lut_idx);
+
+				UPDATE_MAXFRAME(maxcolor, animation->diffuse_r_lut_idx + animation->diffuse_r_lut_len);
+				UPDATE_MAXFRAME(maxcolor, animation->diffuse_g_lut_idx + animation->diffuse_g_lut_len);
+				UPDATE_MAXFRAME(maxcolor, animation->diffuse_b_lut_idx + animation->diffuse_b_lut_len);
+				UPDATE_MAXFRAME(maxcolor, animation->ambient_r_lut_idx + animation->ambient_r_lut_len);
+				UPDATE_MAXFRAME(maxcolor, animation->ambient_g_lut_idx + animation->ambient_g_lut_len);
+				UPDATE_MAXFRAME(maxcolor, animation->ambient_b_lut_idx + animation->ambient_b_lut_len);
+				UPDATE_MAXFRAME(maxcolor, animation->specular_r_lut_idx + animation->specular_r_lut_len);
+				UPDATE_MAXFRAME(maxcolor, animation->specular_g_lut_idx + animation->specular_g_lut_len);
+				UPDATE_MAXFRAME(maxcolor, animation->specular_b_lut_idx + animation->specular_b_lut_len);
+				UPDATE_MAXFRAME(maxcolor, animation->alpha_lut_idx + animation->alpha_lut_len);
+			}
+
+			printf("[%d] material animation group with %d frames\n", i, maxcolor);
+
+			material_anims->color_lut = (u8*) alloc_from_heap(maxcolor);
+
+			for(j = 0; j < maxcolor; j++)
+				material_anims->color_lut[j] = color_lut[j];
+
+			material_anims->time = 0;
+		} else {
+			anim->material_animations[i] = NULL;
+		}
+
+		if(node_animations[i]) {
+			model->node_animations = (void*) 1;
+		}
+	}
+
+	// select first animation
+	for(i = 0; i < anim->count; i++) {
+		if(texcoord_animations[i]) {
+			parse_texcoord_animation(model, anim->texcoord_animations[i]);
+			break;
+		}
+	}
+
+	for(i = 0; i < anim->count; i++) {
+		if(material_animations[i]) {
+			parse_material_animation(model, anim->material_animations[i]);
+			break;
 		}
 	}
 
@@ -322,7 +419,7 @@ void parse_texcoord_animation(CModel* model, CTexcoordAnimationGroup* animation_
 {
 	unsigned int i;
 	int j;
-	MATERIAL* mtl;
+	CMaterial* mtl;
 
 	animation_group->current_frame = 0;
 	model->texcoord_animations = animation_group;
@@ -342,37 +439,25 @@ void parse_texcoord_animation(CModel* model, CTexcoordAnimationGroup* animation_
 	}
 }
 
-float animate_texcoord(float* lut, int anim_frame, int t, int length, int frame_count)
+void parse_material_animation(CModel* model, CMaterialAnimationGroup* animation_group)
 {
-	int result;
-	int t_half;
-	int v7;
-	int idx_1;
-	int idx_2;
-	int blend_factor;
+	unsigned int i;
+	int j;
+	CMaterial* mtl;
 
-	if(length == 1)
-		return *lut;
-	if(t == 1)
-		return lut[anim_frame];
+	animation_group->current_frame = 0;
+	model->material_animations = animation_group;
 
-	t_half = t >> 1;
-	v7 = (frame_count - 1) >> (t >> 1) << (t >> 1);
-	if(anim_frame >= v7)
-		return lut[anim_frame - v7 + (anim_frame >> t_half)];
-
-	idx_1 = anim_frame >> t_half;
-	idx_2 = (anim_frame >> t_half) + 1;
-
-	if(idx_2 >= length)
-		idx_2 = 0;
-
-	blend_factor = anim_frame & (t_half | 1);
-	if(blend_factor)
-		result = lut[idx_1] * (1 - (blend_factor << 12 >> t_half)) + (lut[idx_2] * (blend_factor << 12 >> t_half));
-	else
-		result = lut[idx_1];
-	return result;
+	for(i = 0; i < model->num_materials; i++) {
+		model->materials[i].material_anim_id = -1;
+		mtl = &model->materials[i];
+		for(j = 0; j < animation_group->count; j++) {
+			if(!strcmp(mtl->name, animation_group->animations[j].material_name)) {
+				model->materials[i].material_anim_id = j;
+				break;
+			}
+		}
+	}
 }
 
 float interpolate(float* values, int frame, int speed, int length, int frame_count)
@@ -401,18 +486,75 @@ float interpolate(float* values, int frame, int speed, int length, int frame_cou
 	}
 }
 
+float interpolate_rot(float* values, int frame, int speed, int length, int frame_count)
+{
+	if(length == 1)
+		return *values;
+
+	if(speed == 1)
+		return values[frame];
+
+	// if we can't interpolate, use the last frame
+	int limit = (frame_count - 1) >> (speed / 2) << (speed / 2);
+	if(frame >= limit)
+		return values[frame - limit + (frame >> (speed / 2))];
+
+	// interpolate between two frames if necessary
+	int idx_1 = frame >> (speed / 2);
+	int idx_2 = (frame >> (speed / 2)) + 1;
+
+	float val_1 = values[idx_1];
+	float val_2 = values[idx_2];
+
+	if(val_1 - val_2 > M_PI) {
+		val_2 += 2.0 * M_PI;
+	} else if(val_1 - val_2 < -M_PI) {
+		val_1 += 2.0 * M_PI;
+	}
+
+	float div = 1 << (speed / 2);
+	int t = frame & ((speed / 2) | 1);
+	if(t) {
+		return val_1 * (1 - (float)t / div) + val_2 * ((float)t / div);
+	} else {
+		return val_1;
+	}
+}
+
+u8 interpolate_color_channel(u8* values, int frame, int speed, int length, int frame_count)
+{
+	if(length == 1)
+		return *values;
+
+	if(speed == 1)
+		return values[frame];
+
+	// if we can't interpolate, use the last frame
+	int limit = (frame_count - 1) >> (speed / 2) << (speed / 2);
+	if(frame >= limit)
+		return values[frame - limit + (frame >> (speed / 2))];
+
+	// interpolate between two frames if necessary
+	int idx_1 = frame >> (speed / 2);
+	int idx_2 = (frame >> (speed / 2)) + 1;
+
+	float div = 1 << (speed / 2);
+	int t = frame & ((speed / 2) | 1);
+	if(t) {
+		return (u8) (values[idx_1] * (1.0 - (float)t / div) + values[idx_2] * ((float)t / div));
+	} else {
+		return values[idx_1];
+	}
+}
+
 void process_texcoord_animation(CTexcoordAnimationGroup* group, int id, int width, int height)
 {
 	CTexcoordAnimation* anim = &group->animations[id];
 	float scale_s = interpolate(&group->scales[anim->scale_s_idx], group->current_frame, anim->scale_s_blend, anim->scale_s_len, group->frame_count);
 	float scale_t = interpolate(&group->scales[anim->scale_t_idx], group->current_frame, anim->scale_t_blend, anim->scale_t_len, group->frame_count);
-	float rot = interpolate(&group->rotations[anim->rot_idx], group->current_frame, anim->rot_blend, anim->rot_len, group->frame_count);
+	float rot = interpolate_rot(&group->rotations[anim->rot_idx], group->current_frame, anim->rot_blend, anim->rot_len, group->frame_count);
 	float translate_s = interpolate(&group->translations[anim->translate_s_idx], group->current_frame, anim->translate_s_blend, anim->translate_s_len, group->frame_count);
 	float translate_t = interpolate(&group->translations[anim->translate_t_idx], group->current_frame, anim->translate_t_blend, anim->translate_t_len, group->frame_count);
-
-	// printf("scale=(%f,%f), rot=%f, translate=(%f,%f)\n", scale_s, scale_t, rot, translate_s, translate_t);
-	// if(rot != 0)
-	// 	printf("[%4d/%4d] rot=%f [%f]\n", group->current_frame, group->frame_count, rot, rot / M_PI * 180.0);
 
 	glMatrixMode(GL_TEXTURE);
 	glTranslatef(translate_s * width, translate_t * height, 0);
@@ -422,6 +564,26 @@ void process_texcoord_animation(CTexcoordAnimationGroup* group, int id, int widt
 		glTranslatef(-width / 2, -height / 2, 0);
 	}
 	glScalef(scale_s, scale_t, 1);
+}
+
+void process_material_animation(CMaterialAnimationGroup* group, int id, CMaterial* material)
+{
+	CMaterialAnimation* anim = &group->animations[id];
+
+	material->diffuse.r = interpolate_color_channel(&group->color_lut[anim->diffuse_r_lut_idx], group->current_frame, anim->diffuse_r_blend, anim->diffuse_r_lut_len, group->frame_count);
+	material->diffuse.g = interpolate_color_channel(&group->color_lut[anim->diffuse_g_lut_idx], group->current_frame, anim->diffuse_g_blend, anim->diffuse_g_lut_len, group->frame_count);
+	material->diffuse.b = interpolate_color_channel(&group->color_lut[anim->diffuse_b_lut_idx], group->current_frame, anim->diffuse_b_blend, anim->diffuse_b_lut_len, group->frame_count);
+
+	material->ambient.r = interpolate_color_channel(&group->color_lut[anim->ambient_r_lut_idx], group->current_frame, anim->ambient_r_blend, anim->ambient_r_lut_len, group->frame_count);
+	material->ambient.g = interpolate_color_channel(&group->color_lut[anim->ambient_g_lut_idx], group->current_frame, anim->ambient_g_blend, anim->ambient_g_lut_len, group->frame_count);
+	material->ambient.b = interpolate_color_channel(&group->color_lut[anim->ambient_b_lut_idx], group->current_frame, anim->ambient_b_blend, anim->ambient_b_lut_len, group->frame_count);
+
+	material->specular.r = interpolate_color_channel(&group->color_lut[anim->specular_r_lut_idx], group->current_frame, anim->specular_r_blend, anim->specular_r_lut_len, group->frame_count);
+	material->specular.g = interpolate_color_channel(&group->color_lut[anim->specular_g_lut_idx], group->current_frame, anim->specular_g_blend, anim->specular_g_lut_len, group->frame_count);
+	material->specular.b = interpolate_color_channel(&group->color_lut[anim->specular_b_lut_idx], group->current_frame, anim->specular_b_blend, anim->specular_b_lut_len, group->frame_count);
+
+	if(!(material->anim_flags & 2))
+		material->alpha = interpolate_color_channel(&group->color_lut[anim->alpha_lut_idx], group->current_frame, anim->alpha_blend, anim->alpha_lut_len, group->frame_count);
 }
 
 #define	FRAME_TIME	(1.0 / 30.0)
@@ -439,7 +601,18 @@ void CAnimation_process(CAnimation* animation, float dt)
 				anim->time -= inc * FRAME_TIME;
 			}
 			anim->current_frame %= anim->frame_count;
-			// printf("frame %4d/%4d\n", anim->current_frame, anim->frame_count);
+			// printf("[tex] frame %4d/%4d\n", anim->current_frame, anim->frame_count);
+		}
+		if(animation->material_animations[i]) {
+			CMaterialAnimationGroup* anim = animation->material_animations[i];
+			anim->time += dt;
+			int inc = anim->time / FRAME_TIME;
+			if(inc) {
+				anim->current_frame += inc;
+				anim->time -= inc * FRAME_TIME;
+			}
+			anim->current_frame %= anim->frame_count;
+			// printf("[mtl] frame %4d/%4d\n", anim->current_frame, anim->frame_count);
 		}
 	}
 }

@@ -16,11 +16,15 @@ typedef struct {
 extern CRoom* room;
 extern State game_state;
 
+extern Mtx44 projection;
+extern Mtx44 view;
+
 extern StringTable game_messages;
 extern StringTable location_names;
 
 void GAMEInit();
 void GAMESetRoom(int room_id, unsigned int layer_mask);
+void GAMERenderScene(float aspect);
 
 const char* get_current_room_name();
 

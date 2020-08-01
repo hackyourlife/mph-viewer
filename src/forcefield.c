@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <string.h>
 #include <GL/gl.h>
 
 #include "types.h"
@@ -39,7 +40,7 @@ CEntity* CForceField_construct(const char* node_name, EntityData* data)
 
 	if(obj->flags & 1) {
 		obj->base.scan_id = force_field_scan_ids[force_field->type];
-		obj->alpha = 31;
+		obj->alpha = 1;
 	} else {
 		obj->base.scan_id = 0;
 		obj->alpha = 0;
@@ -68,13 +69,13 @@ CEntity* CForceField_construct(const char* node_name, EntityData* data)
 
 	obj->model = (CModel*) alloc_from_heap(sizeof(CModel));
 	memcpy(obj->model, force_field_model, sizeof(CModel));
-	obj->model->materials = (MATERIAL*) alloc_from_heap(sizeof(MATERIAL) * obj->model->num_materials);
-	memcpy(obj->model->materials, force_field_model->materials, sizeof(MATERIAL) * obj->model->num_materials);
-	obj->model->palettes = (PALETTE*) alloc_from_heap(sizeof(PALETTE) * obj->model->num_palettes);
-	memcpy(obj->model->palettes, force_field_model->palettes, sizeof(PALETTE) * obj->model->num_palettes);
+	obj->model->materials = (CMaterial*) alloc_from_heap(sizeof(CMaterial) * obj->model->num_materials);
+	memcpy(obj->model->materials, force_field_model->materials, sizeof(CMaterial) * obj->model->num_materials);
+	obj->model->palettes = (CPalette*) alloc_from_heap(sizeof(CPalette) * obj->model->num_palettes);
+	memcpy(obj->model->palettes, force_field_model->palettes, sizeof(CPalette) * obj->model->num_palettes);
 
 	int palid = door_palette_ids[obj->type];
-	memcpy(obj->model->palettes, &alimbic_palettes_model->palettes[palid], sizeof(PALETTE));
+	memcpy(obj->model->palettes, &alimbic_palettes_model->palettes[palid], sizeof(CPalette));
 
 	CModel_set_textures(obj->model);
 
@@ -93,16 +94,26 @@ void CForceField_process(CEntity* obj, float dt)
 	CForceField* self = (CForceField*)obj;
 
 	if(self->flags & 1) {
-		if(self->alpha < 31) {
+		if(self->alpha < 1) {
 			self->alpha += dt;
-			if(self->alpha > 31)
-				self->alpha = 31;
+			if(self->alpha > 1)
+				self->alpha = 1;
 		}
 	} else if(self->alpha) {
 		self->alpha -= dt;
 		if(self->alpha < 0)
 			self->alpha = 0;
 	}
+}
+
+void CForceField_set_state(CEntity* obj, int state)
+{
+	CForceField* self = (CForceField*)obj;
+
+	if(state)
+		self->flags |= 1;
+	else
+		self->flags &= ~1;
 }
 
 void CForceField_render(CEntity* obj)
@@ -112,14 +123,7 @@ void CForceField_render(CEntity* obj)
 	if(self->alpha == 0)
 		return;
 
-	glMatrixMode(GL_MODELVIEW);
-	glPushMatrix();
-	glMultMatrixf(self->transform.a);
-
-	CModel_render_all(self->model);
-
-	glMatrixMode(GL_MODELVIEW);
-	glPopMatrix();
+	CModel_render_all(self->model, &self->transform, self->alpha);
 }
 
 Vec3* CForceField_get_position(CEntity* obj)

@@ -49,8 +49,52 @@ typedef struct {
 } CTexcoordAnimationGroup;
 
 typedef struct {
+	char				material_name[64];
+	int				diffuse_r_blend;
+	int				diffuse_g_blend;
+	int				diffuse_b_blend;
+	int				diffuse_r_lut_len;
+	int				diffuse_g_lut_len;
+	int				diffuse_b_lut_len;
+	int				diffuse_r_lut_idx;
+	int				diffuse_g_lut_idx;
+	int				diffuse_b_lut_idx;
+	int				ambient_r_blend;
+	int				ambient_g_blend;
+	int				ambient_b_blend;
+	int				ambient_r_lut_len;
+	int				ambient_g_lut_len;
+	int				ambient_b_lut_len;
+	int				ambient_r_lut_idx;
+	int				ambient_g_lut_idx;
+	int				ambient_b_lut_idx;
+	int				specular_r_blend;
+	int				specular_g_blend;
+	int				specular_b_blend;
+	int				specular_r_lut_len;
+	int				specular_g_lut_len;
+	int				specular_b_lut_len;
+	int				specular_r_lut_idx;
+	int				specular_g_lut_idx;
+	int				specular_b_lut_idx;
+	int				alpha_blend;
+	int				alpha_lut_len;
+	int				alpha_lut_idx;
+	int				material_id;
+} CMaterialAnimation;
+
+typedef struct {
+	float				time;
+	int				frame_count;
+	int				current_frame;
+	int				count;
+	u8*				color_lut;
+	CMaterialAnimation*		animations;
+} CMaterialAnimationGroup;
+
+typedef struct {
 	void*				node_animations;
-	void*				material_animations;
+	CMaterialAnimationGroup**	material_animations;
 	CTexcoordAnimationGroup**	texcoord_animations;
 	void*				texture_animations;
 	unsigned int			count;
@@ -78,9 +122,11 @@ typedef struct {
 	Color3				ambient;
 	Color3				specular;
 	int				texcoord_anim_id;
+	int				material_anim_id;
 	GXTexGen			texgen_mode;
 	int				matrix_id;
-} MATERIAL;
+	int				anim_flags;
+} CMaterial;
 
 typedef struct {
 	char				name[64];
@@ -95,13 +141,15 @@ typedef struct {
 	Vec3				angle;
 	Vec3				pos;
 	Mtx44				node_transform;
-} NODE;
+	float				offset;
+	fx32				offset_raw;
+} CNode;
 
 typedef struct {
 	unsigned int			matid;
 	unsigned int			dlistid;
 	float				bounds[3][2];
-} MESH;
+} CMesh;
 
 typedef struct {
 	unsigned int			format;
@@ -109,22 +157,22 @@ typedef struct {
 	unsigned int			height;
 	bool				opaque;
 	u8*				data;
-} TEXTURE;
+} CTexture;
 
 typedef struct {
 	unsigned int			size;
 	u16*				data;
-} PALETTE;
+} CPalette;
 
 typedef struct {
 	void*				scenedata;
 
-	MATERIAL*			materials;
-	NODE*				nodes;
-	MESH*				meshes;
+	CMaterial*			materials;
+	CNode*				nodes;
+	CMesh*				meshes;
 	int*				dlists;
-	TEXTURE*			textures;
-	PALETTE*			palettes;
+	CTexture*			textures;
+	CPalette*			palettes;
 	unsigned int			num_meshes;
 	unsigned int			num_textures;
 	unsigned int			num_palettes;
@@ -144,12 +192,11 @@ typedef struct {
 	float				max_y;
 	float				min_z;
 	float				max_z;
-	char*				room_node_name;
-	int				room_node_id;
 
 	CAnimation*			animation;
 	void*				node_animations;
 	CTexcoordAnimationGroup*	texcoord_animations;
+	CMaterialAnimationGroup*	material_animations;
 } CModel;
 
 int	get_node_child(const char* name, CModel* scene);
@@ -164,10 +211,11 @@ CModel*	CModel_load_file(const char* model, const char* textures, int layer_mask
 void	CModel_set_textures(CModel* model);
 void	CModel_set_texture_filter(CModel* model, int type);
 void	CModel_free(CModel* scene);
-void	CModel_render(CModel* scene);
-void	CModel_render_all(CModel* scene);
-void	CModel_render_nodes(CModel* scene, int node_idx);
-void	CModel_render_node(CModel* scene, int node_idx, float alpha);
+void	CModel_render_all(CModel* scene, Mtx44* mtx, float alpha);
+void	CModel_render_node(CModel* scene, Mtx44* mtx, int node_idx, float alpha);
 void	CModel_compute_node_matrices(CModel* model, int start_idx);
+
+void	CModel_begin_scene(void);
+void	CModel_end_scene(void);
 
 #endif

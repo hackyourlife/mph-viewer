@@ -8,5 +8,6 @@ void load_animation(CAnimation** animation, const char* filename, CModel* model,
 
 void CAnimation_process(CAnimation* animation, float dt);
 void process_texcoord_animation(CTexcoordAnimationGroup* group, int id, int width, int height);
+void process_material_animation(CMaterialAnimationGroup* group, int id, CMaterial* material);
 
 #endif

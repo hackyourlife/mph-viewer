@@ -133,14 +133,7 @@ void CPlatform_render(CEntity* obj)
 	if(!platform_model[self->type])
 		return;
 
-	glMatrixMode(GL_MODELVIEW);
-	glPushMatrix();
-	glMultMatrixf(self->transform.a);
-
-	CModel_render_all(platform_model[self->type]);
-
-	glMatrixMode(GL_MODELVIEW);
-	glPopMatrix();
+	CModel_render_all(platform_model[self->type], &self->transform, 1.0);
 }
 
 Vec3* CPlatform_get_position(CEntity* obj)

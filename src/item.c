@@ -4,6 +4,7 @@
 #include <GL/gl.h>
 
 #include "types.h"
+#include "mtx.h"
 #include "model.h"
 #include "animation.h"
 #include "entity.h"
@@ -123,36 +124,38 @@ void CItem_process(CEntity* obj, float dt)
 		self->rotation -= 360.0;
 }
 
+float CItem_get_y(fx32 y)
+{
+	// if y <= -2663 then y += 2663
+	// else if y == 6393 then y += 2812
+	// else y += 2662
+	if(y <= -2663)
+		return FX_FX32_TO_F32(y + 2663);
+	else if(y == 6393)
+		return FX_FX32_TO_F32(y + 2812);
+	else
+		return FX_FX32_TO_F32(y + 2662);
+}
+
 void CItem_render(CEntity* obj)
 {
 	CItem* self = (CItem*)obj;
+	Mtx44 mtx;
 
-	float off = -pickup_models[self->model_id]->min_y + (sinf(self->rotation / 180.0 * M_PI) + 1.0) / 8.0f;
+	float y = CItem_get_y(self->item->pos.y) + (sinf(self->rotation / 180.0 * M_PI) + 1.0) / 8.0f;
 
 	if(self->has_base) {
-		glMatrixMode(GL_MODELVIEW);
-		glPushMatrix();
-
-		glTranslatef(self->pos.x, self->pos.y, self->pos.z);
-
-		CModel_render(item_base_model);
-
-		glMatrixMode(GL_MODELVIEW);
-		glPopMatrix();
+		MTX44Trans(&mtx, self->pos.x, self->pos.y, self->pos.z);
+		CModel_render_all(item_base_model, &mtx, 1.0);
 	}
 
 	if(self->enabled) {
-		glMatrixMode(GL_MODELVIEW);
-		glPushMatrix();
+		Mtx44 rot;
+		MTX44Trans(&mtx, self->pos.x, y, self->pos.z);
+		MTX44RotRad(&rot, 'y', self->rotation / 180.0 * M_PI);
+		MTX44Concat(&mtx, &rot, &mtx);
 
-		glTranslatef(self->pos.x, self->pos.y + off, self->pos.z);
-
-		glRotatef(self->rotation, 0, 1, 0);
-
-		CModel_render(pickup_models[self->model_id]);
-
-		glMatrixMode(GL_MODELVIEW);
-		glPopMatrix();
+		CModel_render_all(pickup_models[self->model_id], &mtx, 1.0);
 	}
 }
 
