@@ -1,4 +1,5 @@
 #include <math.h>
+#include <stdlib.h>
 #include <GL/gl.h>
 #include <GL/glext.h> // for mingw
 
@@ -10,6 +11,7 @@
 #include "strings.h"
 #include "hud.h"
 #include "world.h"
+#include "heap.h"
 
 #ifdef _WIN32
 extern PFNGLLOADTRANSPOSEMATRIXFPROC	glLoadTransposeMatrixf;
@@ -48,6 +50,15 @@ void GAMESetRoom(int room_id, unsigned int layer_mask)
 	EntInitialize(28);
 	room = load_room(&rooms[room_id], 0, 0, 0, layer_mask);
 	setup_room_portals();
+}
+
+void GAMEUnloadRoom(void)
+{
+	if(room) {
+		CRoom_free(room);
+		free_to_heap(room);
+	}
+	room = NULL;
 }
 
 void GAMERenderScene(float aspect)

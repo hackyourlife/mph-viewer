@@ -128,11 +128,7 @@ void CArtifact_render(CEntity* obj)
 	if(self->model_id >= 8) {
 		CModel_render_all(octolith_model, &self->transform, 1.0);
 	} else {
-		Mtx44 mtx;
-		MTX44RotRad(&mtx, 'y', self->rotation / 180.0 * M_PI);
-		MTX44Concat(&self->transform, &mtx, &mtx);
-
-		CModel_render_all(artifact_models[self->model_id], &mtx, 1.0);
+		CModel_render_all(artifact_models[self->model_id], &self->transform, 1.0);
 	}
 }
 

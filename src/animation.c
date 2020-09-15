@@ -9,6 +9,13 @@
 #include "heap.h"
 #include "endianess.h"
 #include "model.h"
+#include "mtx.h"
+
+#define	NODE_ANIM_DISABLE	1
+#define	NODE_ANIM_NO_SCALE	2
+#define	NODE_ANIM_NO_ROT	4
+#define	NODE_ANIM_NO_POS	8
+#define	NODE_ANIM_STEP1		16
 
 typedef struct {
 	u32	frame_count;
@@ -77,10 +84,10 @@ typedef struct {
 
 typedef struct {
 	u32	frame_count;
-	u32	fx32_ptr; // u32*
-	u32	short_ptr; // u16*
-	u32	int_ptr; // u32*
-	u32*	node_animations; // NodeAnimation*
+	u32	scale_lut; // fx32*
+	u32	rot_lut; // u16*
+	u32	translate_lut; // fx32*
+	u32	animations; // NodeAnimation*
 } NodeAnimationGroup;
 
 typedef struct {
@@ -169,41 +176,42 @@ typedef struct {
 } TexcoordAnimation;
 
 typedef struct {
-	u8	field_0;
-	u8	field_1;
-	u8	field_2;
+	u8	scale_x_step;
+	u8	scale_y_step;
+	u8	scale_z_step;
 	u8	flags;
-	u16	field_4;
-	u16	field_6;
-	u16	field_8;
-	u16	field_A;
-	u16	field_C;
-	u16	field_E;
-	u8	field_10;
-	u8	field_11;
-	u8	field_12;
+	u16	scale_x_len;
+	u16	scale_y_len;
+	u16	scale_z_len;
+	u16	scale_x_idx;
+	u16	scale_y_idx;
+	u16	scale_z_idx;
+	u8	rot_x_step;
+	u8	rot_y_step;
+	u8	rot_z_step;
 	u8	field_13;
-	u16	field_14;
-	u16	field_16;
-	u16	field_18;
-	u16	field_1A;
-	u16	field_1C;
-	u16	field_1E;
-	u8	field_20;
-	u8	field_21;
-	u8	field_22;
+	u16	rot_x_len;
+	u16	rot_y_len;
+	u16	rot_z_len;
+	u16	rot_x_idx;
+	u16	rot_y_idx;
+	u16	rot_z_idx;
+	u8	translate_x_step;
+	u8	translate_y_step;
+	u8	translate_z_step;
 	u8	field_23;
-	u16	field_24;
-	u16	field_26;
-	u16	field_28;
-	u16	field_2A;
-	u16	field_2C;
-	u16	field_2E;
+	u16	translate_x_len;
+	u16	translate_y_len;
+	u16	translate_z_len;
+	u16	translate_x_idx;
+	u16	translate_y_idx;
+	u16	translate_z_idx;
 } NodeAnimation;
 
 CAnimation* parse_animation(Animation *animation, CModel *model);
 void parse_texcoord_animation(CModel* model, CTexcoordAnimationGroup* animation_group);
 void parse_material_animation(CModel* model, CMaterialAnimationGroup* animation_group);
+void parse_node_animation(CNode* nodes, int node_cnt, CNodeAnimationGroup* animation_group);
 
 void load_animation(CAnimation** animation, const char* filename, CModel* model, char flags)
 {
@@ -217,6 +225,41 @@ void load_animation(CAnimation** animation, const char* filename, CModel* model,
 	*animation = parse_animation(raw, model);
 
 	free_to_heap(raw);
+}
+
+void CAnimation_free(CAnimation* animation)
+{
+	unsigned int i;
+
+	for(i = 0; i < animation->count; i++) {
+		if(animation->texcoord_animations[i]) {
+			CTexcoordAnimationGroup* group = animation->texcoord_animations[i];
+			free_to_heap(group->scales);
+			free_to_heap(group->rotations);
+			free_to_heap(group->translations);
+			free_to_heap(group->animations);
+			free_to_heap(group);
+		}
+		if(animation->material_animations[i]) {
+			CMaterialAnimationGroup* group = animation->material_animations[i];
+			free_to_heap(group->color_lut);
+			free_to_heap(group->animations);
+			free_to_heap(group);
+		}
+		if(animation->node_animations[i]) {
+			CNodeAnimationGroup* group = animation->node_animations[i];
+			free_to_heap(group->scales);
+			free_to_heap(group->angles);
+			free_to_heap(group->translations);
+			free_to_heap(group->animations);
+			free_to_heap(group);
+		}
+	}
+
+	free_to_heap(animation->texcoord_animations);
+	free_to_heap(animation->material_animations);
+	free_to_heap(animation->node_animations);
+	free_to_heap(animation);
 }
 
 CAnimation* parse_animation(Animation* animation, CModel* model)
@@ -237,6 +280,7 @@ CAnimation* parse_animation(Animation* animation, CModel* model)
 
 	anim->texcoord_animations = (CTexcoordAnimationGroup**) alloc_from_heap(anim->count * sizeof(CTexcoordAnimationGroup*));
 	anim->material_animations = (CMaterialAnimationGroup**) alloc_from_heap(anim->count * sizeof(CMaterialAnimationGroup*));
+	anim->node_animations     = (CNodeAnimationGroup**)     alloc_from_heap(anim->count * sizeof(CNodeAnimationGroup*));
 	for(i = 0; i < anim->count; i++) {
 		if(texcoord_animations[i]) {
 			int maxscale = 0;
@@ -292,6 +336,10 @@ CAnimation* parse_animation(Animation* animation, CModel* model)
 				UPDATE_MAXFRAME(maxxlat, animation->translate_s_idx + animation->translate_s_len);
 				UPDATE_MAXFRAME(maxxlat, animation->translate_t_idx + animation->translate_t_len);
 			}
+
+			maxscale++;
+			maxrot++;
+			maxxlat++;
 
 			printf("[%d] texcoord animation group with %d/%d/%d frames\n", i, maxscale, maxrot, maxxlat);
 
@@ -378,6 +426,8 @@ CAnimation* parse_animation(Animation* animation, CModel* model)
 				UPDATE_MAXFRAME(maxcolor, animation->alpha_lut_idx + animation->alpha_lut_len);
 			}
 
+			maxcolor++;
+
 			printf("[%d] material animation group with %d frames\n", i, maxcolor);
 
 			material_anims->color_lut = (u8*) alloc_from_heap(maxcolor);
@@ -391,11 +441,99 @@ CAnimation* parse_animation(Animation* animation, CModel* model)
 		}
 
 		if(node_animations[i]) {
-			model->node_animations = (void*) 1;
+			int maxscale = 0;
+			int maxrot = 0;
+			int maxpos = 0;
+			int j;
+
+			NodeAnimationGroup* raw_node_anim_group = (NodeAnimationGroup*) ((uintptr_t)animation + (uintptr_t)get32bit_LE((u8*)&node_animations[i]));
+			NodeAnimation* raw_node_anims = (NodeAnimation*) ((uintptr_t)animation + (uintptr_t)get32bit_LE((u8*)&raw_node_anim_group->animations));
+			CNodeAnimationGroup* node_anims = (CNodeAnimationGroup*) alloc_from_heap(sizeof(CNodeAnimationGroup));
+
+			anim->node_animations[i] = node_anims;
+
+			fx32* scales       = (fx32*) ((uintptr_t)animation + (uintptr_t)get32bit_LE((u8*)&raw_node_anim_group->scale_lut));
+			u16*  angles       = (u16*)  ((uintptr_t)animation + (uintptr_t)get32bit_LE((u8*)&raw_node_anim_group->rot_lut));
+			fx32* translations = (fx32*) ((uintptr_t)animation + (uintptr_t)get32bit_LE((u8*)&raw_node_anim_group->translate_lut));
+
+			node_anims->frame_count = get32bit_LE((u8*)&raw_node_anim_group->frame_count);
+			node_anims->current_frame = 0;
+			node_anims->num_nodes = model->num_nodes;
+			node_anims->nodes = model->nodes;
+			node_anims->animations = (CNodeAnimation*) alloc_from_heap(node_anims->num_nodes * sizeof(CNodeAnimation));
+			memset(node_anims->animations, 0, node_anims->num_nodes * sizeof(CNodeAnimation));
+
+			for(j = 0; j < node_anims->num_nodes; j++) {
+				NodeAnimation* raw_anim = &raw_node_anims[j];
+				CNodeAnimation* animation = &node_anims->animations[j];
+
+				animation->flags = raw_anim->flags;
+				animation->scale_x_step = raw_anim->scale_x_step;
+				animation->scale_y_step = raw_anim->scale_y_step;
+				animation->scale_z_step = raw_anim->scale_z_step;
+				animation->scale_x_len = get16bit_LE((u8*)&raw_anim->scale_x_len);
+				animation->scale_y_len = get16bit_LE((u8*)&raw_anim->scale_y_len);
+				animation->scale_z_len = get16bit_LE((u8*)&raw_anim->scale_z_len);
+				animation->scale_x_idx = get16bit_LE((u8*)&raw_anim->scale_x_idx);
+				animation->scale_y_idx = get16bit_LE((u8*)&raw_anim->scale_y_idx);
+				animation->scale_z_idx = get16bit_LE((u8*)&raw_anim->scale_z_idx);
+				animation->rot_x_step = raw_anim->rot_x_step;
+				animation->rot_y_step = raw_anim->rot_y_step;
+				animation->rot_z_step = raw_anim->rot_z_step;
+				animation->rot_x_len = get16bit_LE((u8*)&raw_anim->rot_x_len);
+				animation->rot_y_len = get16bit_LE((u8*)&raw_anim->rot_y_len);
+				animation->rot_z_len = get16bit_LE((u8*)&raw_anim->rot_z_len);
+				animation->rot_x_idx = get16bit_LE((u8*)&raw_anim->rot_x_idx);
+				animation->rot_y_idx = get16bit_LE((u8*)&raw_anim->rot_y_idx);
+				animation->rot_z_idx = get16bit_LE((u8*)&raw_anim->rot_z_idx);
+				animation->translate_x_step = raw_anim->translate_x_step;
+				animation->translate_y_step = raw_anim->translate_y_step;
+				animation->translate_z_step = raw_anim->translate_z_step;
+				animation->translate_x_len = get16bit_LE((u8*)&raw_anim->translate_x_len);
+				animation->translate_y_len = get16bit_LE((u8*)&raw_anim->translate_y_len);
+				animation->translate_z_len = get16bit_LE((u8*)&raw_anim->translate_z_len);
+				animation->translate_x_idx = get16bit_LE((u8*)&raw_anim->translate_x_idx);
+				animation->translate_y_idx = get16bit_LE((u8*)&raw_anim->translate_y_idx);
+				animation->translate_z_idx = get16bit_LE((u8*)&raw_anim->translate_z_idx);
+
+				UPDATE_MAXFRAME(maxscale, animation->scale_x_idx + animation->scale_x_len);
+				UPDATE_MAXFRAME(maxscale, animation->scale_y_idx + animation->scale_y_len);
+				UPDATE_MAXFRAME(maxscale, animation->scale_z_idx + animation->scale_z_len);
+				UPDATE_MAXFRAME(maxrot, animation->rot_x_idx + animation->rot_x_len);
+				UPDATE_MAXFRAME(maxrot, animation->rot_y_idx + animation->rot_y_len);
+				UPDATE_MAXFRAME(maxrot, animation->rot_z_idx + animation->rot_z_len);
+				UPDATE_MAXFRAME(maxpos, animation->translate_x_idx + animation->translate_x_len);
+				UPDATE_MAXFRAME(maxpos, animation->translate_y_idx + animation->translate_y_len);
+				UPDATE_MAXFRAME(maxpos, animation->translate_z_idx + animation->translate_z_len);
+			}
+
+			maxscale++;
+			maxrot++;
+			maxpos++;
+
+			printf("[%d] node animation group with %d/%d/%d frames\n", i, maxscale, maxrot, maxpos);
+
+			node_anims->scales = (float*) alloc_from_heap(maxscale * sizeof(float));
+			node_anims->angles = (float*) alloc_from_heap(maxrot * sizeof(float));
+			node_anims->translations = (float*) alloc_from_heap(maxpos * sizeof(float));
+
+			for(j = 0; j < maxscale; j++)
+				node_anims->scales[j] = FX_FX32_TO_F32(scales[j]);
+
+			for(j = 0; j < maxrot; j++)
+				node_anims->angles[j] = FX_FX32_TO_F32(FX_IDX_TO_RAD(angles[j]));
+
+			for(j = 0; j < maxpos; j++)
+				node_anims->translations[j] = FX_FX32_TO_F32(translations[j]);
+
+			node_anims->time = 0;
+		} else {
+			anim->node_animations[i] = NULL;
 		}
 	}
 
 	// select first animation
+#if 0
 	for(i = 0; i < anim->count; i++) {
 		if(texcoord_animations[i]) {
 			parse_texcoord_animation(model, anim->texcoord_animations[i]);
@@ -409,6 +547,27 @@ CAnimation* parse_animation(Animation* animation, CModel* model)
 			break;
 		}
 	}
+
+	for(i = 0; i < anim->count; i++) {
+		if(node_animations[i]) {
+			parse_node_animation(model->nodes, model->num_nodes, anim->node_animations[i]);
+			model->node_animation = anim->node_animations[i];
+			break;
+		}
+	}
+#else
+	anim->current_anim = 0;
+	if(texcoord_animations[anim->current_anim]) {
+		parse_texcoord_animation(model, anim->texcoord_animations[anim->current_anim]);
+	}
+	if(material_animations[anim->current_anim]) {
+		parse_material_animation(model, anim->material_animations[anim->current_anim]);
+	}
+	if(node_animations[anim->current_anim]) {
+		parse_node_animation(model->nodes, model->num_nodes, anim->node_animations[anim->current_anim]);
+		model->node_animation = anim->node_animations[anim->current_anim];
+	}
+#endif
 
 	model->animation = anim;
 
@@ -460,6 +619,43 @@ void parse_material_animation(CModel* model, CMaterialAnimationGroup* animation_
 	}
 }
 
+void parse_node_animation(CNode* nodes, int node_cnt, CNodeAnimationGroup* animation_group)
+{
+	unsigned int i;
+
+	for(i = 0; i < node_cnt; i++) {
+		CNodeAnimation* anim = &animation_group->animations[i];
+		anim->flags = 0;
+
+		if(anim->scale_x_len == 1 && anim->scale_y_len == 1 && anim->scale_z_len == 1) {
+			float* scales = animation_group->scales;
+			if(scales[anim->scale_x_idx] == 1.0 && scales[anim->scale_y_idx] == 1.0 && scales[anim->scale_z_idx] == 1.0) {
+				anim->flags |= NODE_ANIM_NO_SCALE;
+			}
+		}
+		if(anim->translate_x_len == 1 && anim->translate_y_len == 1 && anim->translate_z_len == 1) {
+			float* translations = animation_group->translations;
+			if(translations[anim->translate_x_idx] == 0.0 && translations[anim->translate_y_idx] == 0.0 && translations[anim->translate_z_idx] == 0.0) {
+				anim->flags |= NODE_ANIM_NO_POS;
+			}
+		}
+		if(anim->rot_x_len == 1 && anim->rot_y_len == 1 && anim->rot_z_len == 1) {
+			float* angles = animation_group->angles;
+			if(angles[anim->rot_x_idx] == 0.0 && angles[anim->rot_y_idx] == 0.0 && angles[anim->rot_z_idx] == 0.0) {
+				anim->flags |= NODE_ANIM_NO_ROT;
+			}
+		}
+		if(anim->flags & NODE_ANIM_NO_SCALE && anim->flags & NODE_ANIM_NO_ROT && anim->flags & NODE_ANIM_NO_POS) {
+			anim->flags |= NODE_ANIM_DISABLE;
+		}
+		if(anim->scale_x_step == 1 && anim->scale_y_step == 1 && anim->scale_z_step == 1
+				&& anim->rot_x_step == 1 && anim->rot_y_step == 1 && anim->rot_z_step == 1
+				&& anim->translate_x_step == 1 && anim->translate_y_step == 1 && anim->translate_z_step == 1) {
+			anim->flags |= NODE_ANIM_STEP1;
+		}
+	}
+}
+
 float interpolate(float* values, int frame, int speed, int length, int frame_count)
 {
 	if(length == 1)
@@ -486,7 +682,7 @@ float interpolate(float* values, int frame, int speed, int length, int frame_cou
 	}
 }
 
-float interpolate_rot(float* values, int frame, int speed, int length, int frame_count)
+float interpolate_angle(float* values, int frame, int speed, int length, int frame_count)
 {
 	if(length == 1)
 		return *values;
@@ -547,23 +743,29 @@ u8 interpolate_color_channel(u8* values, int frame, int speed, int length, int f
 	}
 }
 
-void process_texcoord_animation(CTexcoordAnimationGroup* group, int id, int width, int height)
+void process_texcoord_animation(CTexcoordAnimationGroup* group, int id, int width, int height, Mtx44* texcoord)
 {
 	CTexcoordAnimation* anim = &group->animations[id];
 	float scale_s = interpolate(&group->scales[anim->scale_s_idx], group->current_frame, anim->scale_s_blend, anim->scale_s_len, group->frame_count);
 	float scale_t = interpolate(&group->scales[anim->scale_t_idx], group->current_frame, anim->scale_t_blend, anim->scale_t_len, group->frame_count);
-	float rot = interpolate_rot(&group->rotations[anim->rot_idx], group->current_frame, anim->rot_blend, anim->rot_len, group->frame_count);
+	float rot = interpolate_angle(&group->rotations[anim->rot_idx], group->current_frame, anim->rot_blend, anim->rot_len, group->frame_count);
 	float translate_s = interpolate(&group->translations[anim->translate_s_idx], group->current_frame, anim->translate_s_blend, anim->translate_s_len, group->frame_count);
 	float translate_t = interpolate(&group->translations[anim->translate_t_idx], group->current_frame, anim->translate_t_blend, anim->translate_t_len, group->frame_count);
 
-	glMatrixMode(GL_TEXTURE);
-	glTranslatef(translate_s * width, translate_t * height, 0);
 	if(rot != 0) {
-		glTranslatef(width / 2, height / 2, 0);
-		glRotatef(rot / M_PI * 180.0 , 0, 0, 1);
-		glTranslatef(-width / 2, -height / 2, 0);
+		Mtx44 trans;
+		Mtx44 invtrans;
+		MTX44Trans(&trans, width / 2.0, height / 2.0, 0);
+		MTX44Trans(&invtrans, -width / 2.0, -height / 2.0, 0);
+		MTX44RotRad(texcoord, 'z', rot);
+		MTX44Concat(&trans, texcoord, texcoord);
+		MTX44Concat(texcoord, &invtrans, texcoord);
+		MTX44TransApply(texcoord, texcoord, translate_s * width, translate_t * height, 0);
+		MTX44ScaleApply(texcoord, texcoord, scale_s, scale_t, 1);
+	} else {
+		MTX44Trans(texcoord, translate_s * width, translate_t * height, 0);
+		MTX44ScaleApply(texcoord, texcoord, scale_s, scale_t, 1);
 	}
-	glScalef(scale_s, scale_t, 1);
 }
 
 void process_material_animation(CMaterialAnimationGroup* group, int id, CMaterial* material)
@@ -584,6 +786,72 @@ void process_material_animation(CMaterialAnimationGroup* group, int id, CMateria
 
 	if(!(material->anim_flags & 2))
 		material->alpha = interpolate_color_channel(&group->color_lut[anim->alpha_lut_idx], group->current_frame, anim->alpha_blend, anim->alpha_lut_len, group->frame_count);
+}
+
+void get_srt(CNodeAnimationGroup* group, CNodeAnimation* anim, int frame, Vec3* scale, Vec3* rot, Vec3* trans)
+{
+	if(anim->flags & NODE_ANIM_NO_SCALE) {
+		scale->z = 1.0;
+		scale->y = 1.0;
+		scale->x = 1.0;
+	} else {
+		scale->x = interpolate(&group->scales[anim->scale_x_idx], frame, anim->scale_x_step, anim->scale_x_len, group->frame_count);
+		scale->y = interpolate(&group->scales[anim->scale_y_idx], frame, anim->scale_y_step, anim->scale_y_len, group->frame_count);
+		scale->z = interpolate(&group->scales[anim->scale_z_idx], frame, anim->scale_z_step, anim->scale_z_len, group->frame_count);
+	}
+
+	if(anim->flags & NODE_ANIM_NO_ROT) {
+		rot->z = 0.0;
+		rot->y = 0.0;
+		rot->x = 0.0;
+	} else {
+		rot->x = interpolate_angle(&group->angles[anim->rot_x_idx], frame, anim->rot_x_step, anim->rot_x_len, group->frame_count);
+		rot->y = interpolate_angle(&group->angles[anim->rot_y_idx], frame, anim->rot_y_step, anim->rot_y_len, group->frame_count);
+		rot->z = interpolate_angle(&group->angles[anim->rot_z_idx], frame, anim->rot_z_step, anim->rot_z_len, group->frame_count);
+	}
+
+	if(anim->flags & NODE_ANIM_NO_POS) {
+		trans->z = 0.0;
+		trans->y = 0.0;
+		trans->x = 0.0;
+	} else {
+		trans->x = interpolate(&group->translations[anim->translate_x_idx], frame, anim->translate_x_step, anim->translate_x_len, group->frame_count);
+		trans->y = interpolate(&group->translations[anim->translate_y_idx], frame, anim->translate_y_step, anim->translate_y_len, group->frame_count);
+		trans->z = interpolate(&group->translations[anim->translate_z_idx], frame, anim->translate_z_step, anim->translate_z_len, group->frame_count);
+	}
+}
+
+void process_node_animation(CNodeAnimationGroup* group, Mtx44* root_transform, float mdlscale)
+{
+	unsigned int i;
+	CNode* nodes = group->nodes;
+
+	for(i = 0; i < group->num_nodes; i++) {
+		Mtx44 srt;
+		Mtx44* transform;
+		CNode* node = &nodes[i];
+		CNodeAnimation* anim = &group->animations[i];
+
+		if(node->parent >= 0) {
+			transform = &nodes[node->parent].node_transform;
+		} else {
+			transform = root_transform;
+		}
+
+		if(anim->flags & NODE_ANIM_DISABLE) {
+			MTX44Identity(&srt);
+		} else {
+			Vec3 scale;
+			Vec3 rot;
+			Vec3 translate;
+
+			get_srt(group, anim, group->current_frame, &scale, &rot, &translate);
+
+			scale_rotate_translate(&srt, scale.x, scale.y, scale.z, rot.x, rot.y, rot.z, translate.x / mdlscale, translate.y / mdlscale, translate.z / mdlscale);
+		}
+
+		MTX44Concat(transform, &srt, &node->node_transform);
+	}
 }
 
 #define	FRAME_TIME	(1.0 / 30.0)
@@ -613,6 +881,17 @@ void CAnimation_process(CAnimation* animation, float dt)
 			}
 			anim->current_frame %= anim->frame_count;
 			// printf("[mtl] frame %4d/%4d\n", anim->current_frame, anim->frame_count);
+		}
+		if(animation->node_animations[i]) {
+			CNodeAnimationGroup* anim = animation->node_animations[i];
+			anim->time += dt;
+			int inc = anim->time / FRAME_TIME;
+			if(inc) {
+				anim->current_frame += inc;
+				anim->time -= inc * FRAME_TIME;
+			}
+			anim->current_frame %= anim->frame_count;
+			// printf("[node] frame %4d/%4d\n", anim->current_frame, anim->frame_count);
 		}
 	}
 }

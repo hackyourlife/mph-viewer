@@ -259,6 +259,7 @@ static void load_extensions(void)
 #endif
 
 const char* vertex_shader = "\
+#version 120 \n\
 uniform bool is_billboard; \n\
 uniform bool use_light; \n\
 uniform bool fog_enable; \n\
@@ -273,6 +274,8 @@ uniform vec4 fog_color; \n\
 uniform float far_plane; \n\
 uniform mat4 projection; \n\
 uniform mat4 view; \n\
+uniform mat4 model; \n\
+uniform mat4 texcoordmtx; \n\
 \n\
 varying vec2 texcoord; \n\
 varying vec4 color; \n\
@@ -293,12 +296,12 @@ vec4 light_calc(vec4 light_vec, vec4 light_col, vec3 normal_vec, vec4 dif_col, v
 void main() \n\
 { \n\
 	if(is_billboard) { \n\
-		gl_Position = projection * (view * gl_ModelViewMatrix * vec4(0.0, 0.0, 0.0, 1.0) + vec4(gl_Vertex.xyz, 0.0)); \n\
+		gl_Position = projection * (view * model * vec4(0.0, 0.0, 0.0, 1.0) + vec4(gl_Vertex.xyz, 0.0)); \n\
 	} else { \n\
-		gl_Position = projection * view * gl_ModelViewMatrix * gl_Vertex; \n\
+		gl_Position = projection * view * model * gl_Vertex; \n\
 	} \n\
 	if(use_light) { \n\
-		vec3 normal = normalize(mat3(gl_ModelViewMatrix) * gl_Normal); \n\
+		vec3 normal = normalize(mat3(model) * gl_Normal); \n\
 		vec4 dif = gl_Color.a < 0.5 ? vec4(gl_Color.rgb, 1.0) : diffuse; \n\
 		vec4 amb = gl_Color.a < 0.5 ? vec4(0.0, 0.0, 0.0, 1.0) : ambient; \n\
 		vec4 col1 = light_calc(light1vec, light1col, normal, dif, amb, specular); \n\
@@ -307,9 +310,10 @@ void main() \n\
 	} else { \n\
 		color = vec4(gl_Color.rgb, 1.0); \n\
 	} \n\
-	texcoord = vec2(gl_TextureMatrix[0] * gl_MultiTexCoord0); \n\
+	texcoord = vec2(texcoordmtx * gl_MultiTexCoord0); \n\
 }";
 const char* fragment_shader = "\
+#version 120 \n\
 uniform bool is_billboard; \n\
 uniform bool use_texture; \n\
 uniform bool fog_enable; \n\
@@ -364,6 +368,8 @@ static GLuint fog_offset;
 static GLuint alpha_scale;
 static GLuint proj_matrix;
 static GLuint view_matrix;
+static GLuint model_matrix;
+static GLuint texcoord_matrix;
 
 static float l1v[4];
 static float l1c[4];
@@ -481,6 +487,8 @@ void CModel_init(void)
 	alpha_scale = glGetUniformLocation(shader, "alpha_scale");
 	proj_matrix = glGetUniformLocation(shader, "projection");
 	view_matrix = glGetUniformLocation(shader, "view");
+	model_matrix = glGetUniformLocation(shader, "model");
+	texcoord_matrix = glGetUniformLocation(shader, "texcoordmtx");
 }
 
 unsigned int crc32(u8* data, u32 len) {
@@ -495,7 +503,7 @@ unsigned int crc32(u8* data, u32 len) {
 			mask = -(crc & 1);
 			crc = (crc >> 1) ^ (0xEDB88320 & mask);
 		}
-		i = i + 1;
+		i++;
 	}
 	return ~crc;
 }
@@ -1033,7 +1041,7 @@ static void make_textures(CModel* model)
 		}
 
 		u32 hash = crc32(texels, texsize);
-		u32 palhash = crc32((u8*) paxels, palsize);
+		u32 palhash = crc32((u8*) paxels, pal->size);
 
 #ifdef TEXDUMP
 		char filename[128];
@@ -1246,7 +1254,7 @@ CModel* CModel_load(u8* scenedata, unsigned int scenesize, u8* texturedata, unsi
 		fatal("not enough memory");
 
 	scene->animation = NULL;
-	scene->node_animations = NULL;
+	scene->node_animation = NULL;
 	scene->texcoord_animations = NULL;
 	scene->material_animations = NULL;
 
@@ -1477,17 +1485,15 @@ CModel* CModel_load(u8* scenedata, unsigned int scenesize, u8* texturedata, unsi
 		CModel_compute_node_matrices(scene, 0);
 	}
 
-	if(rawheader->texture_matrices) {
-		u16 mtxcnt = get16bit_LE((u8*)&rawheader->num_texture_matrices);
-		printf("%d texture matrices\n", mtxcnt);
-		unsigned int j;
-		MtxFx44* rawmtx = (MtxFx44*) ((uintptr_t)scenedata + (uintptr_t)get32bit_LE((u8*)&rawheader->texture_matrices));
-		scene->texture_matrices = (Mtx44*) alloc_from_heap(mtxcnt * sizeof(Mtx44));
-		for(i = 0; i < mtxcnt; i++) {
-			for(j = 0; j < 16; j++)
-				scene->texture_matrices[i].a[j] = FX_FX32_TO_F32(rawmtx[i].a[j]);
-		}
+#if 0
+	if(rawheader->num_texture_matrices) {
+		u16 cnt = get16bit_LE((u8*)&rawheader->num_texture_matrices);
+		printf("allocating %d texture matrices\n", cnt);
+		scene->texture_matrices = (Mtx44*) alloc_from_heap(cnt * sizeof(Mtx44));
+		for(i = 0; i < cnt; i++)
+			MTX44Identity(&scene->texture_matrices[i]);
 	} else
+#endif
 		scene->texture_matrices = NULL;
 
 	return scene;
@@ -1642,7 +1648,14 @@ void CModel_free(CModel* scene)
 	for(i = 0; i < scene->num_dlists; i++) {
 		glDeleteLists(1, scene->dlists[i]);
 	}
+	for(i = 0; i < scene->num_textures; i++) {
+		free(scene->textures[i].data);
+	}
+	for(i = 0; i < scene->num_palettes; i++) {
+		free(scene->palettes[i].data);
+	}
 	free(scene->textures);
+	free(scene->palettes);
 	free(scene->materials);
 	free(scene->meshes);
 	free(scene->dlists);
@@ -1656,6 +1669,7 @@ extern bool lighting;
 
 static CNode* current_node;
 
+extern bool texturing;
 void CModel_render_mesh(CModel* scene, int mesh_id)
 {
 	if(mesh_id >= scene->num_meshes) {
@@ -1677,28 +1691,32 @@ void CModel_render_mesh(CModel* scene, int mesh_id)
 	glColor4fv(diff);
 
 	if(material.texid != 0xFFFF) {
+		Mtx44 texcoord;
+
 		glBindTexture(GL_TEXTURE_2D, material.tex);
 
-		//Convert pixel coords to normalised STs
-		glMatrixMode(GL_TEXTURE);
-		glLoadIdentity();
-
 		if(scene->texcoord_animations && material.texcoord_anim_id != -1) {
-			glScalef(1.0f / texture->width, 1.0f / texture->height, 1.0f);
-			process_texcoord_animation(scene->texcoord_animations, material.texcoord_anim_id, texture->width, texture->height);
-		} else if(material.texgen_mode != GX_TEXGEN_NONE && scene->texture_matrices) {
-			glLoadMatrixf(scene->texture_matrices[material.matrix_id].a);
-		} else if(material.texgen_mode) {
-			if(material.rot_z != 0)
-				glRotatef(material.rot_z / M_PI * 180.0, 0, 0, 1);
-			glTranslatef(material.translate_s * texture->width, material.translate_t * texture->height, 0.0f);
-			glScalef(material.scale_s, material.scale_t, 1.0f);
-			glScalef(1.0f / texture->width, 1.0f / texture->height, 1.0f);
+			process_texcoord_animation(scene->texcoord_animations, material.texcoord_anim_id, texture->width, texture->height, &texcoord);
+			MTX44ScaleApply(&texcoord, &texcoord, 1.0f / texture->width, 1.0f / texture->height, 1.0f);
+		} else if(material.texgen_mode != GX_TEXGEN_NONE) {
+			if(scene->texture_matrices) {
+				MTX44Copy(&scene->texture_matrices[material.matrix_id], &texcoord);
+				MTX44ScaleApply(&texcoord, &texcoord, 1.0f / texture->width, 1.0f / texture->height, 1.0f);
+			} else {
+				if(material.rot_z != 0)
+					MTX44RotRad(&texcoord, 'z', material.rot_z);
+				else
+					MTX44Identity(&texcoord);
+				MTX44TransApply(&texcoord, &texcoord, material.translate_s * texture->width, material.translate_t * texture->height, 0.0f);
+				MTX44ScaleApply(&texcoord, &texcoord, material.scale_s, material.scale_t, 1.0f);
+				MTX44ScaleApply(&texcoord, &texcoord, 1.0f / texture->width, 1.0f / texture->height, 1.0f);
+			}
 		} else {
-			glScalef(1.0f / texture->width, 1.0f / texture->height, 1.0f);
+			MTX44Scale(&texcoord, 1.0f / texture->width, 1.0f / texture->height, 1.0f);
 		}
 
-		glUniform1i(use_texture, glIsEnabled(GL_TEXTURE_2D));
+		glUniform1i(use_texture, texturing);
+		glUniformMatrix4fv(texcoord_matrix, 1, 0, texcoord.a);
 	} else {
 		glBindTexture(GL_TEXTURE_2D, 0);
 		glUniform1i(use_texture, 0);
@@ -1828,8 +1846,7 @@ void CModel_begin_scene(void)
 static void RenderEntity_render(RenderEntity* ent)
 {
 	glUniform1f(alpha_scale, ent->alpha);
-	glMatrixMode(GL_MODELVIEW);
-	glLoadMatrixf(ent->transform.a);
+	glUniformMatrix4fv(model_matrix, 1, 0, ent->transform.a);
 	current_node = ent->node;
 	CModel_billboard(ent->node);
 	CModel_render_mesh(ent->model, ent->mesh);
@@ -1996,6 +2013,10 @@ void CModel_render_all(CModel* scene, Mtx44* mtx, float alpha)
 
 	MTX44ScaleApply(mtx, &mat, scene->scale, scene->scale, scene->scale);
 
+	if(scene->node_animation) {
+		process_node_animation(scene->node_animation, &mat, scene->scale);
+	}
+
 	glUseProgram(shader);
 	CModel_update_uniforms(alpha);
 
@@ -2009,7 +2030,9 @@ void CModel_render_all(CModel* scene, Mtx44* mtx, float alpha)
 		if(node->mesh_count) {
 			int mesh_id = node->mesh_id / 2;
 
-			if(scene->apply_transform) {
+			if(scene->node_animation) {
+				MTX44Copy(&node->node_transform, &transform);
+			} else if(scene->apply_transform) {
 				MTX44Concat(&mat, &node->node_transform, &transform);
 			} else {
 				MTX44Copy(&mat, &transform);

@@ -80,6 +80,27 @@ CRoom* load_room(const RoomDescription* descr, fx32 x, fx32 y, fx32 z, int layer
 	return room;
 }
 
+void CRoom_free(CRoom* room)
+{
+	if(room->model) {
+		CModel_free(room->model);
+		room->model = NULL;
+	}
+	if(room->animation) {
+		CAnimation_free(room->animation);
+		room->animation = NULL;
+	}
+	if(room->room_nodes) {
+		NodeRef* ref = room->room_nodes;
+		while(ref) {
+			NodeRef* next = ref->next;
+			free(ref);
+			ref = next;
+		}
+		room->room_nodes = NULL;
+	}
+}
+
 void CRoom_setLights(CRoom* room)
 {
 	float light_1_vec[4] = { FX_FX32_TO_F32(room->description->light_1_vec.x), FX_FX32_TO_F32(room->description->light_1_vec.y), FX_FX32_TO_F32(room->description->light_1_vec.z), 0 };

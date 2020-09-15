@@ -25,6 +25,7 @@ extern StringTable location_names;
 void GAMEInit();
 void GAMESetRoom(int room_id, unsigned int layer_mask);
 void GAMERenderScene(float aspect);
+void GAMEUnloadRoom(void);
 
 const char* get_current_room_name();
 

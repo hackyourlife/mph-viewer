@@ -60,6 +60,29 @@ bool fog_disable = false;
 bool show_entities = true;
 bool force_fields_active = true;
 
+bool cleanup = false;
+
+typedef struct {
+	u16	bfType;
+	u32	bfSize;
+	u32	bfReserved;
+	u32	bfOffBits;
+	u32	biSize;
+	u32	biWidth;
+	u32	biHeight;
+	u16	biPlanes;
+	u16	biBitCount;
+	u32	biCompression;
+	u32	biSizeImage;
+	u32	biXPelsPerMeter;
+	u32	biYPelsPerMeter;
+	u32	biClrUsed;
+	u32	biClrImportant;
+} __attribute__((packed, aligned(1))) BMP;
+
+unsigned int frame_count = 0;
+bool dump_frames = false;
+
 void move_forward(float distance)
 {
 	pos_x -= distance * (float)sin_deg(heading) * cos_deg(heading_y) * 0.05f;
@@ -143,10 +166,19 @@ void special_up_func(int key, int x, int y)
 
 bool depth_test = true;
 
+void perform_cleanup(void)
+{
+	if(!cleanup) {
+		cleanup = true;
+		GAMEUnloadRoom();
+	}
+}
+
 void kb_func(unsigned char key, int x, int y)
 {
 	switch(key) {
 		case 0x1b:
+			perform_cleanup();
 			exit(0);
 			break;
 		case 't':	case 'T': {
@@ -229,6 +261,11 @@ void kb_func(unsigned char key, int x, int y)
 		}
 		break;
 
+		case 'r':	case 'R': {
+			dump_frames = !dump_frames;
+		}
+		break;
+
 		case ' ':
 			key_down_speed = true;
 			break;
@@ -248,6 +285,8 @@ void process()
 {
 	long now = glutGet(GLUT_ELAPSED_TIME);
 	float dt = (now - time) / 1000.0f;
+	if(dump_frames)
+		dt = 1.0 / 60.0;
 	float distance = dt * 64.0f;
 	if(key_down_speed)
 		distance *= 10.0f;
@@ -277,6 +316,43 @@ void display_func(void)
 	GAMERenderScene(aspect);
 
 	glutSwapBuffers();
+
+	if(dump_frames) {
+		int width = vp[2] - vp[0];
+		int height = vp[3] - vp[1];
+
+		char filename[256];
+		sprintf(filename, "framedump/frame-%04d.bmp", frame_count++);
+
+		printf("dumping frame %d [%dx%d to %s]\n", frame_count, width, height, filename);
+
+		FILE* f = fopen(filename, "wb");
+		BMP header;
+		BMP bmp;
+		bmp.bfType = 0x4D42;
+		bmp.bfSize = sizeof(BMP) + width * height * 3;
+		bmp.bfReserved = 0;
+		bmp.bfOffBits = sizeof(BMP);
+		bmp.biSize = 40;
+		bmp.biWidth = width;
+		bmp.biHeight = height;
+		bmp.biPlanes = 1;
+		bmp.biBitCount = 24;
+		bmp.biCompression = 0;
+		bmp.biSizeImage = 0;
+		bmp.biXPelsPerMeter = 0;
+		bmp.biYPelsPerMeter = 0;
+		bmp.biClrUsed = 0;
+		bmp.biClrImportant = 0;
+		fwrite(&bmp, sizeof(BMP), 1, f);
+
+		void* buf = malloc(width * height * 3);
+		glReadPixels(0, 0, width, height, GL_BGR, GL_UNSIGNED_BYTE, buf);
+		fwrite(buf, width * height, 3, f);
+		free(buf);
+
+		fclose(f);
+	}
 }
 
 int compute_mask(const char* mask)
@@ -410,6 +486,8 @@ int main(int argc, char **argv)
 	printf(" - L toggles lighting\n");
 
 	glutMainLoop();
+
+	perform_cleanup();
 
 	return 0;
 }

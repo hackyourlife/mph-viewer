@@ -92,12 +92,74 @@ typedef struct {
 	CMaterialAnimation*		animations;
 } CMaterialAnimationGroup;
 
+/* this model structure has to be here because CNodeAnimationGroup references it */
 typedef struct {
-	void*				node_animations;
+	char				name[64];
+	int				parent;
+	unsigned int			child;
+	unsigned int			next;
+	unsigned int			enabled;
+	unsigned int			mesh_count;
+	unsigned int			mesh_id;
+	unsigned int			type;
+	Vec3				scale;
+	Vec3				angle;
+	Vec3				pos;
+	Mtx44				node_transform;
+	float				offset;
+	fx32				offset_raw;
+} CNode;
+
+typedef struct {
+	int				flags;
+	int				scale_x_step;
+	int				scale_y_step;
+	int				scale_z_step;
+	int				scale_x_len;
+	int				scale_y_len;
+	int				scale_z_len;
+	int				scale_x_idx;
+	int				scale_y_idx;
+	int				scale_z_idx;
+	int				rot_x_step;
+	int				rot_y_step;
+	int				rot_z_step;
+	int				rot_x_len;
+	int				rot_y_len;
+	int				rot_z_len;
+	int				rot_x_idx;
+	int				rot_y_idx;
+	int				rot_z_idx;
+	int				translate_x_step;
+	int				translate_y_step;
+	int				translate_z_step;
+	int				translate_x_len;
+	int				translate_y_len;
+	int				translate_z_len;
+	int				translate_x_idx;
+	int				translate_y_idx;
+	int				translate_z_idx;
+} CNodeAnimation;
+
+typedef struct {
+	float				time;
+	int				frame_count;
+	int				current_frame;
+	int				num_nodes;
+	float*				scales;
+	float*				angles;
+	float*				translations;
+	CNodeAnimation*			animations;
+	CNode*				nodes;
+} CNodeAnimationGroup;
+
+typedef struct {
+	CNodeAnimationGroup**		node_animations;
 	CMaterialAnimationGroup**	material_animations;
 	CTexcoordAnimationGroup**	texcoord_animations;
 	void*				texture_animations;
 	unsigned int			count;
+	int				current_anim;
 } CAnimation;
 
 /* model structures */
@@ -127,23 +189,6 @@ typedef struct {
 	int				matrix_id;
 	int				anim_flags;
 } CMaterial;
-
-typedef struct {
-	char				name[64];
-	unsigned int			parent;
-	unsigned int			child;
-	unsigned int			next;
-	unsigned int			enabled;
-	unsigned int			mesh_count;
-	unsigned int			mesh_id;
-	unsigned int			type;
-	Vec3				scale;
-	Vec3				angle;
-	Vec3				pos;
-	Mtx44				node_transform;
-	float				offset;
-	fx32				offset_raw;
-} CNode;
 
 typedef struct {
 	unsigned int			matid;
@@ -194,12 +239,13 @@ typedef struct {
 	float				max_z;
 
 	CAnimation*			animation;
-	void*				node_animations;
+	CNodeAnimationGroup*		node_animation;
 	CTexcoordAnimationGroup*	texcoord_animations;
 	CMaterialAnimationGroup*	material_animations;
 } CModel;
 
 int	get_node_child(const char* name, CModel* scene);
+void	scale_rotate_translate(Mtx44* mtx, float sx, float sy, float sz, float ax, float ay, float az, float x, float y, float z);
 void	CModel_init(void);
 void	CModel_setLights(float l1vec[4], float l1col[4], float l2vec[4], float l2col[4]);
 void	CModel_setFog(bool en, float fogc[4], int fogoffset);
