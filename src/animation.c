@@ -846,8 +846,7 @@ void process_node_animation(CNodeAnimationGroup* group, float mdlscale)
 		if (node->parent >= 0)
 		{
 			MTX44Concat(&nodes[node->parent].node_transform, &srt, &node->node_transform);
-		} else
-		{
+		} else {
 			MTX44Copy(&srt, &node->node_transform);
 		}
 	}
