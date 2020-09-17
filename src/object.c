@@ -156,13 +156,6 @@ void load_object(unsigned int id)
 		// 	sprintf(filename, "models/%s_Collision.bin", objects[id].collision_name);
 		// 	load_collision(&object_collision[id], filename, 0);
 		// }
-		if(id >= 0x2F && id <= 0x34) {
-			int i;
-			for(i = 47; i < 0x34; i = (i + 1) & 0xFF) {
-				object_anim[i] = object_anim[id];
-				// object_collision[i] = object_collision[id];
-			}
-		}
 	}
 }
 

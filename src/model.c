@@ -2014,7 +2014,7 @@ void CModel_render_all(CModel* scene, Mtx44* mtx, float alpha)
 	MTX44ScaleApply(mtx, &mat, scene->scale, scene->scale, scene->scale);
 
 	if(scene->node_animation) {
-		process_node_animation(scene->node_animation, &mat, scene->scale);
+		process_node_animation(scene->node_animation, scene->scale);
 	}
 
 	glUseProgram(shader);
@@ -2030,9 +2030,7 @@ void CModel_render_all(CModel* scene, Mtx44* mtx, float alpha)
 		if(node->mesh_count) {
 			int mesh_id = node->mesh_id / 2;
 
-			if(scene->node_animation) {
-				MTX44Copy(&node->node_transform, &transform);
-			} else if(scene->apply_transform) {
+			if(scene->node_animation || scene->apply_transform) {
 				MTX44Concat(&mat, &node->node_transform, &transform);
 			} else {
 				MTX44Copy(&mat, &transform);

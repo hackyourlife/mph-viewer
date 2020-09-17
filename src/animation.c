@@ -821,22 +821,15 @@ void get_srt(CNodeAnimationGroup* group, CNodeAnimation* anim, int frame, Vec3* 
 	}
 }
 
-void process_node_animation(CNodeAnimationGroup* group, Mtx44* root_transform, float mdlscale)
+void process_node_animation(CNodeAnimationGroup* group, float mdlscale)
 {
 	unsigned int i;
 	CNode* nodes = group->nodes;
 
 	for(i = 0; i < group->num_nodes; i++) {
 		Mtx44 srt;
-		Mtx44* transform;
 		CNode* node = &nodes[i];
 		CNodeAnimation* anim = &group->animations[i];
-
-		if(node->parent >= 0) {
-			transform = &nodes[node->parent].node_transform;
-		} else {
-			transform = root_transform;
-		}
 
 		if(anim->flags & NODE_ANIM_DISABLE) {
 			MTX44Identity(&srt);
@@ -850,7 +843,13 @@ void process_node_animation(CNodeAnimationGroup* group, Mtx44* root_transform, f
 			scale_rotate_translate(&srt, scale.x, scale.y, scale.z, rot.x, rot.y, rot.z, translate.x / mdlscale, translate.y / mdlscale, translate.z / mdlscale);
 		}
 
-		MTX44Concat(transform, &srt, &node->node_transform);
+		if (node->parent >= 0)
+		{
+			MTX44Concat(&nodes[node->parent].node_transform, &srt, &node->node_transform);
+		} else
+		{
+			MTX44Copy(&srt, &node->node_transform);
+		}
 	}
 }
 
