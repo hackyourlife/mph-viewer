@@ -322,7 +322,6 @@ uniform bool is_billboard; \n\
 uniform bool use_texture; \n\
 uniform bool fog_enable; \n\
 uniform vec4 fog_color; \n\
-uniform vec4 ambient; \n\
 uniform int fog_offset; \n\
 uniform float alpha_scale; \n\
 uniform sampler2D tex; \n\
@@ -1870,7 +1869,7 @@ static void CModel_update_uniforms()
 	glUniform1f(alpha_scale, 1.0f);
 	glUniformMatrix4fv(proj_matrix, 1, 0, projection.a);
 	glUniformMatrix4fv(view_matrix, 1, 0, view.a);
-	glUniform3fv(toon_table, TOON_SIZE, &toon_values);
+	glUniform3fv(toon_table, TOON_SIZE, toon_values);
 }
 
 typedef struct RenderEntity RenderEntity;
