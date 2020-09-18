@@ -525,9 +525,6 @@ void CModel_init(void)
 	mat_alpha = glGetUniformLocation(shader, "mat_alpha");
 	mat_mode = glGetUniformLocation(shader, "mat_mode");
 	toon_table = glGetUniformLocation(shader, "toon_table");
-
-	glUseProgram(shader);
-	glUniform3fv(toon_table, TOON_SIZE, &toon_values);
 }
 
 unsigned int crc32(u8* data, u32 len) {
@@ -1864,7 +1861,7 @@ static void CModel_billboard(CNode* node)
 	}
 }
 
-static void CModel_update_uniforms(float alpha)
+static void CModel_update_uniforms()
 {
 	use_room_lights();
 	glUniform1i(fog_enable, fogen && !fogdis);
@@ -1873,7 +1870,7 @@ static void CModel_update_uniforms(float alpha)
 	glUniform1f(alpha_scale, 1.0f);
 	glUniformMatrix4fv(proj_matrix, 1, 0, projection.a);
 	glUniformMatrix4fv(view_matrix, 1, 0, view.a);
-	glUniform1f(alpha_scale, alpha);
+	glUniform3fv(toon_table, TOON_SIZE, &toon_values);
 }
 
 typedef struct RenderEntity RenderEntity;
@@ -1966,9 +1963,11 @@ void CModel_end_scene(void)
 	}
 
 	// depth sort
-	// qsort(sorted, render_count, sizeof(RenderEntity*), RenderEntity_sort);
+	// qsort(sorted, render_count, sizeof(RenderEntity*), RenderEntity_sort);	
 
-	CModel_update_uniforms(1.0);
+	glUseProgram(shader);
+
+	CModel_update_uniforms();
 
 	//////////////////////////////////////////////////////////////////
 	// pass 1: opaque
@@ -2066,6 +2065,8 @@ void CModel_end_scene(void)
 	glDisable(GL_ALPHA_TEST);
 	glDisable(GL_STENCIL_TEST);
 
+	glUseProgram(0);
+
 	// release
 	for(i = 0; i < render_count; i++) {
 		free_to_heap(sorted[i]);
@@ -2112,7 +2113,7 @@ void CModel_render_all(CModel* scene, Mtx44* mtx, float alpha)
 		process_node_animation(scene->node_animation, &mat, scene->scale);
 	}
 
-	CModel_update_uniforms(alpha);
+	glUseProgram(shader);
 
 	unsigned int polygon_id = next_polygon_id++;
 	if(next_polygon_id > 255)
@@ -2140,6 +2141,8 @@ void CModel_render_all(CModel* scene, Mtx44* mtx, float alpha)
 			}
 		}
 	}
+
+	glUseProgram(0);
 }
 
 void CModel_render_node(CModel* scene, Mtx44* mtx, int node_idx, float alpha)
@@ -2149,7 +2152,7 @@ void CModel_render_node(CModel* scene, Mtx44* mtx, int node_idx, float alpha)
 
 	MTX44ScaleApply(mtx, &mat, scene->scale, scene->scale, scene->scale);
 
-	CModel_update_uniforms(alpha);
+	glUseProgram(shader);
 
 	for(i = node_idx; i != -1; i = scene->nodes[i].next) {
 		Mtx44 transform;
@@ -2176,6 +2179,8 @@ void CModel_render_node(CModel* scene, Mtx44* mtx, int node_idx, float alpha)
 			}
 		}
 	}
+
+	glUseProgram(0);
 }
 
 const float toon_values[TOON_SIZE * 3] = {
