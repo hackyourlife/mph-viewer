@@ -103,10 +103,10 @@ void CRoom_free(CRoom* room)
 
 void CRoom_setLights(CRoom* room)
 {
-	float light_1_vec[4] = { FX_FX32_TO_F32(room->description->light_1_vec.x), FX_FX32_TO_F32(room->description->light_1_vec.y), FX_FX32_TO_F32(room->description->light_1_vec.z), 0 };
-	float light_1_col[4] = { room->description->light_1_color.r / 255.0f, room->description->light_1_color.g / 255.0f, room->description->light_1_color.b / 255.0f, room->description->light_1_color.a / 255.0f };
-	float light_2_vec[4] = { FX_FX32_TO_F32(room->description->light_2_vec.x), FX_FX32_TO_F32(room->description->light_2_vec.y), FX_FX32_TO_F32(room->description->light_2_vec.z), 0 };
-	float light_2_col[4] = { room->description->light_2_color.r / 255.0f, room->description->light_2_color.g / 255.0f, room->description->light_2_color.b / 255.0f, room->description->light_2_color.a / 255.0f };
+	float light_1_vec[3] = { FX_FX32_TO_F32(room->description->light_1_vec.x), FX_FX32_TO_F32(room->description->light_1_vec.y), FX_FX32_TO_F32(room->description->light_1_vec.z) };
+	float light_1_col[3] = { room->description->light_1_color.r / 255.0f, room->description->light_1_color.g / 255.0f, room->description->light_1_color.b / 255.0f };
+	float light_2_vec[3] = { FX_FX32_TO_F32(room->description->light_2_vec.x), FX_FX32_TO_F32(room->description->light_2_vec.y), FX_FX32_TO_F32(room->description->light_2_vec.z) };
+	float light_2_col[3] = { room->description->light_2_color.r / 255.0f, room->description->light_2_color.g / 255.0f, room->description->light_2_color.b / 255.0f };
 
 #if 0
 	glLightfv(GL_LIGHT0, GL_POSITION, light_1_vec);

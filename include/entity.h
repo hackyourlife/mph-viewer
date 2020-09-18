@@ -327,6 +327,7 @@ void		EntForceFieldRegister(void);
 void		EntArtifactRegister(void);
 
 void		get_transform_mtx(Mtx44* mtx, VecFx32* vec1, VecFx32* vec2);
+void		get_transform_mtx3(Mtx44* mtx, Vec3* vec1, Vec3* vec2);
 
 float		CItem_get_y(fx32 y);
 void		CForceField_set_state(CEntity* obj, int state);

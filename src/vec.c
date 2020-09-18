@@ -15,6 +15,19 @@ void VEC_CrossProduct(const VecFx32 *a, const VecFx32 *b, VecFx32 *axb)
 	axb->z = z;
 }
 
+void VEC_CrossProduct3(const Vec3 *a, const Vec3 *b, Vec3 *axb)
+{
+	float x, y, z;
+
+	x = a->y * b->z - a->z * b->y;
+	y = a->z * b->x - a->x * b->z;
+	z = a->x * b->y - a->y * b->x;
+
+	axb->x = x;
+	axb->y = y;
+	axb->z = z;
+}
+
 void VEC_Normalize(const VecFx32 *pSrc, VecFx32 *pDst)
 {
 	float x = FX_FX32_TO_F32(pSrc->x);
@@ -24,6 +37,17 @@ void VEC_Normalize(const VecFx32 *pSrc, VecFx32 *pDst)
 	pDst->x = FX_F32_TO_FX32(x / len);
 	pDst->y = FX_F32_TO_FX32(y / len);
 	pDst->z = FX_F32_TO_FX32(z / len);
+}
+
+void VEC_Normalize3(const Vec3 *pSrc, Vec3 *pDst)
+{
+	float x = pSrc->x;
+	float y = pSrc->y;
+	float z = pSrc->z;
+	float len = sqrt(x * x + y * y + z * z);
+	pDst->x = x / len;
+	pDst->y = y / len;
+	pDst->z = z / len;
 }
 
 void MTX_MultVec33(const VecFx32* vec, const MtxFx33* m, VecFx32* dst)

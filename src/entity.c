@@ -291,3 +291,33 @@ void get_transform_mtx(Mtx44* mtx, VecFx32* vec1, VecFx32* vec2)
 	mtx->m[3][2] = 0;
 	mtx->m[3][3] = 1;
 }
+
+void get_transform_mtx3(Mtx44* mtx, Vec3* vec1, Vec3* vec2)
+{
+	Vec3 up;
+	Vec3 dir;
+
+	VEC_CrossProduct3(vec2, vec1, &up);
+	VEC_Normalize3(&up, &up);
+	VEC_CrossProduct3(vec1, &up, &dir);
+
+	mtx->m[0][0] = up.x;
+	mtx->m[0][1] = up.y;
+	mtx->m[0][2] = up.z;
+	mtx->m[0][3] = 0;
+
+	mtx->m[1][0] = dir.x;
+	mtx->m[1][1] = dir.y;
+	mtx->m[1][2] = dir.z;
+	mtx->m[1][3] = 0;
+
+	mtx->m[2][0] = vec1->x;
+	mtx->m[2][1] = vec1->y;
+	mtx->m[2][2] = vec1->z;
+	mtx->m[2][3] = 0;
+
+	mtx->m[3][0] = 0;
+	mtx->m[3][1] = 0;
+	mtx->m[3][2] = 0;
+	mtx->m[3][3] = 1;
+}
