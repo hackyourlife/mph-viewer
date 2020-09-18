@@ -230,6 +230,7 @@ typedef struct {
 	Mtx44*				texture_matrices;
 
 	bool				apply_transform;
+	bool				light_override;
 
 	float				min_x;
 	float				max_x;
@@ -247,7 +248,7 @@ typedef struct {
 int	get_node_child(const char* name, CModel* scene);
 void	scale_rotate_translate(Mtx44* mtx, float sx, float sy, float sz, float ax, float ay, float az, float x, float y, float z);
 void	CModel_init(void);
-void	CModel_setLights(float l1vec[4], float l1col[4], float l2vec[4], float l2col[4]);
+void	CModel_setLights(float l1vec[3], float l1col[3], float l2vec[3], float l2col[3]);
 void	CModel_setFog(bool en, float fogc[4], int fogoffset);
 void	CModel_setFogDisable(bool dis);
 void	load_model(CModel** model, const char* filename, int flags);
@@ -263,5 +264,11 @@ void	CModel_compute_node_matrices(CModel* model, int start_idx);
 
 void	CModel_begin_scene(void);
 void	CModel_end_scene(void);
+
+#define TOON_SIZE 32
+
+#define GetTableColor(c) (((c >> 0) & 0x1F) / 31.0f), (((c >> 5) & 0x1F) / 31.0f), (((c >> 10) & 0x1F) / 31.0f)
+
+extern const float toon_values[TOON_SIZE * 3];
 
 #endif

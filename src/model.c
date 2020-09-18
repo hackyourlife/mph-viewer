@@ -15,10 +15,12 @@
 #include <GL/glext.h> // for mingw
 
 #include "types.h"
+#include "vec.h"
 #include "mtx.h"
 #include "endianess.h"
 #include "model.h"
 #include "animation.h"
+#include "entity.h"
 #include "io.h"
 #include "heap.h"
 #include "os.h"
@@ -227,6 +229,7 @@ PFNGLUSEPROGRAMPROC		glUseProgram;
 PFNGLGETUNIFORMLOCATIONPROC	glGetUniformLocation;
 PFNGLUNIFORM1IPROC		glUniform1i;
 PFNGLUNIFORM1FPROC		glUniform1f;
+PFNGLUNIFORM3FVPROC		glUniform3fv;
 PFNGLUNIFORM4FVPROC		glUniform4fv;
 PFNGLUNIFORMMATRIX4FVPROC	glUniformMatrix4fv;
 PFNGLLOADTRANSPOSEMATRIXFPROC	glLoadTransposeMatrixf;
@@ -251,6 +254,7 @@ static void load_extensions(void)
 	glGetUniformLocation = (PFNGLGETUNIFORMLOCATIONPROC)wglGetProcAddress("glGetUniformLocation");
 	glUniform1i = (PFNGLUNIFORM1IPROC)wglGetProcAddress("glUniform1i");
 	glUniform1f = (PFNGLUNIFORM1FPROC)wglGetProcAddress("glUniform1f");
+	glUniform3fv = (PFNGLUNIFORM3FVPROC)wglGetProcAddress("glUniform3fv");
 	glUniform4fv = (PFNGLUNIFORM4FVPROC)wglGetProcAddress("glUniform4fv");
 	glUniformMatrix4fv = (PFNGLUNIFORMMATRIX4FVPROC)wglGetProcAddress("glUniformMatrix4fv");
 	glLoadTransposeMatrixf = (PFNGLLOADTRANSPOSEMATRIXFPROC)wglGetProcAddress("glLoadTransposeMatrixf");
@@ -263,13 +267,13 @@ const char* vertex_shader = "\
 uniform bool is_billboard; \n\
 uniform bool use_light; \n\
 uniform bool fog_enable; \n\
-uniform vec4 light1vec; \n\
-uniform vec4 light1col; \n\
-uniform vec4 light2vec; \n\
-uniform vec4 light2col; \n\
-uniform vec4 diffuse; \n\
-uniform vec4 ambient; \n\
-uniform vec4 specular; \n\
+uniform vec3 light1vec; \n\
+uniform vec3 light1col; \n\
+uniform vec3 light2vec; \n\
+uniform vec3 light2col; \n\
+uniform vec3 diffuse; \n\
+uniform vec3 ambient; \n\
+uniform vec3 specular; \n\
 uniform vec4 fog_color; \n\
 uniform float far_plane; \n\
 uniform mat4 projection; \n\
@@ -280,16 +284,16 @@ uniform mat4 texcoordmtx; \n\
 varying vec2 texcoord; \n\
 varying vec4 color; \n\
 \n\
-vec4 light_calc(vec4 light_vec, vec4 light_col, vec3 normal_vec, vec4 dif_col, vec4 amb_col, vec4 spe_col) \n\
+vec3 light_calc(vec3 light_vec, vec3 light_col, vec3 normal_vec, vec3 dif_col, vec3 amb_col, vec3 spe_col) \n\
 { \n\
 	vec3 sight_vec = vec3(0.0, 0.0, -1.0); \n\
-	float dif_factor = max(0.0, -dot(light_vec.xyz, normal_vec)); \n\
-	vec3 half_vec = (light_vec.xyz + sight_vec) / 2.0; \n\
+	float dif_factor = max(0.0, -dot(light_vec, normal_vec)); \n\
+	vec3 half_vec = (light_vec + sight_vec) / 2.0; \n\
 	float spe_factor = max(0.0, dot(-half_vec, normal_vec)); \n\
 	spe_factor = spe_factor * spe_factor; \n\
-	vec4 spe_out = spe_col * light_col * spe_factor; \n\
-	vec4 dif_out = dif_col * light_col * dif_factor; \n\
-	vec4 amb_out = amb_col * light_col; \n\
+	vec3 spe_out = spe_col * light_col * spe_factor; \n\
+	vec3 dif_out = dif_col * light_col * dif_factor; \n\
+	vec3 amb_out = amb_col * light_col; \n\
 	return spe_out + dif_out + amb_out; \n\
 } \n\
 \n\
@@ -302,11 +306,11 @@ void main() \n\
 	} \n\
 	if(use_light) { \n\
 		vec3 normal = normalize(mat3(model) * gl_Normal); \n\
-		vec4 dif = gl_Color.a < 0.5 ? vec4(gl_Color.rgb, 1.0) : diffuse; \n\
-		vec4 amb = gl_Color.a < 0.5 ? vec4(0.0, 0.0, 0.0, 1.0) : ambient; \n\
-		vec4 col1 = light_calc(light1vec, light1col, normal, dif, amb, specular); \n\
-		vec4 col2 = light_calc(light2vec, light2col, normal, dif, amb, specular); \n\
-		color = vec4(min((col1 + col2).rgb, vec3(1.0, 1.0, 1.0)), 1.0); \n\
+		vec3 dif = gl_Color.a < 0.5 ? gl_Color.rgb : diffuse; \n\
+		vec3 amb = gl_Color.a < 0.5 ? vec3(0.0, 0.0, 0.0) : ambient; \n\
+		vec3 col1 = light_calc(light1vec, light1col, normal, dif, amb, specular); \n\
+		vec3 col2 = light_calc(light2vec, light2col, normal, dif, amb, specular); \n\
+		color = vec4(min((col1 + col2), vec3(1.0, 1.0, 1.0)), 1.0); \n\
 	} else { \n\
 		color = vec4(gl_Color.rgb, 1.0); \n\
 	} \n\
@@ -324,15 +328,36 @@ uniform float alpha_scale; \n\
 uniform sampler2D tex; \n\
 varying vec2 texcoord; \n\
 varying vec4 color; \n\
+uniform float mat_alpha; \n\
+uniform int mat_mode; \n\
+uniform vec3[32] toon_table; \n\
+\n\
+vec4 toon_color(vec4 vtx_color) \n\
+{ \n\
+	return vec4(toon_table[int(vtx_color.r * 31)], vtx_color.a); \n\
+} \n\
 \n\
 void main() \n\
 { \n\
 	vec4 col; \n\
 	if(use_texture) { \n\
 		vec4 texcolor = texture2D(tex, texcoord); \n\
-		col = color * texcolor; \n\
-	} else  { \n\
-		col = color; \n\
+		if (mat_mode == 1) { \n\
+			col = vec4( \n\
+				(texcolor.r * texcolor.a + color.r * (1 - texcolor.a)), \n\
+				(texcolor.g * texcolor.a + color.g * (1 - texcolor.a)), \n\
+				(texcolor.b * texcolor.a + color.b * (1 - texcolor.a)), \n\
+				mat_alpha * color.a \n\
+			); \n\
+		} else if (mat_mode == 2) { \n\
+			vec4 toon = toon_color(color); \n\
+			col = vec4(texcolor.rgb * toon.rgb + toon.rgb, mat_alpha * texcolor.a * color.a); \n\
+		} else { \n\
+			col = color * vec4(texcolor.rgb, mat_alpha * texcolor.a); \n\
+		} \n\
+	} else { \n\
+		col = mat_mode == 2 ? toon_color(color) : color; \n\
+		col.a *= mat_alpha; \n\
 	} \n\
 	if(fog_enable) { \n\
 		float ndcDepth = (2.0 * gl_FragCoord.z - gl_DepthRange.near - gl_DepthRange.far) / (gl_DepthRange.far - gl_DepthRange.near); \n\
@@ -370,23 +395,31 @@ static GLuint proj_matrix;
 static GLuint view_matrix;
 static GLuint model_matrix;
 static GLuint texcoord_matrix;
+static GLuint mat_alpha;
+static GLuint mat_mode;
+static GLuint toon_table;
 
-static float l1v[4];
-static float l1c[4];
-static float l2v[4];
-static float l2c[4];
+static float l1v[3];
+static float l1c[3];
+static float l2v[3];
+static float l2c[3];
+
+static float l1v_override[3];
+static float l1c_override[3];
+static float l2v_override[3];
+static float l2c_override[3];
 
 static bool fogen = false;
 static bool fogdis = false;
 static float fogcol[4];
 static int fogoff;
 
-void CModel_setLights(float l1vec[4], float l1col[4], float l2vec[4], float l2col[4])
+void CModel_setLights(float l1vec[3], float l1col[3], float l2vec[3], float l2col[3])
 {
-	memcpy(l1v, l1vec, sizeof(float[4]));
-	memcpy(l1c, l1col, sizeof(float[4]));
-	memcpy(l2v, l2vec, sizeof(float[4]));
-	memcpy(l2c, l2col, sizeof(float[4]));
+	memcpy(l1v, l1vec, sizeof(float[3]));
+	memcpy(l1c, l1col, sizeof(float[3]));
+	memcpy(l2v, l2vec, sizeof(float[3]));
+	memcpy(l2c, l2col, sizeof(float[3]));
 }
 
 void CModel_setFog(bool en, float fogc[4], int fogoffset)
@@ -489,6 +522,12 @@ void CModel_init(void)
 	view_matrix = glGetUniformLocation(shader, "view");
 	model_matrix = glGetUniformLocation(shader, "model");
 	texcoord_matrix = glGetUniformLocation(shader, "texcoordmtx");
+	mat_alpha = glGetUniformLocation(shader, "mat_alpha");
+	mat_mode = glGetUniformLocation(shader, "mat_mode");
+	toon_table = glGetUniformLocation(shader, "toon_table");
+
+	glUseProgram(shader);
+	glUniform3fv(toon_table, TOON_SIZE, &toon_values);
 }
 
 unsigned int crc32(u8* data, u32 len) {
@@ -1494,8 +1533,8 @@ CModel* CModel_load(u8* scenedata, unsigned int scenesize, u8* texturedata, unsi
 			MTX44Identity(&scene->texture_matrices[i]);
 	} else
 #endif
-		scene->texture_matrices = NULL;
-
+	scene->texture_matrices = NULL;
+	scene->light_override = false;
 	return scene;
 }
 
@@ -1665,12 +1704,24 @@ void CModel_free(CModel* scene)
 	free(scene);
 }
 
+static void use_room_lights()
+{
+	glUniform3fv(light1vec, 1, l1v);
+	glUniform3fv(light1col, 1, l1c);
+	glUniform3fv(light2vec, 1, l2v);
+	glUniform3fv(light2col, 1, l2c);
+}
+
 extern bool lighting;
 
 static CNode* current_node;
 
 extern bool texturing;
-void CModel_render_mesh(CModel* scene, int mesh_id)
+
+extern float pos_x;
+extern float pos_y;
+extern float pos_z;
+void CModel_render_mesh(CModel* scene, int mesh_id, MtxFx44* transform)
 {
 	if(mesh_id >= scene->num_meshes) {
 		printf("trying to render mesh %d, but scene only has %d meshes\n", mesh_id, scene->num_meshes);
@@ -1687,8 +1738,8 @@ void CModel_render_mesh(CModel* scene, int mesh_id)
 		process_material_animation(scene->material_animations, material.material_anim_id, &material);
 	}
 
-	float diff[4] = { material.diffuse.r / 31.0f, material.diffuse.g / 31.0f, material.diffuse.b / 31.0f, 1.0f };
-	glColor4fv(diff);
+	float diff[3] = { material.diffuse.r / 31.0f, material.diffuse.g / 31.0f, material.diffuse.b / 31.0f };
+	glColor3fv(diff);
 
 	if(material.texid != 0xFFFF) {
 		Mtx44 texcoord;
@@ -1723,15 +1774,66 @@ void CModel_render_mesh(CModel* scene, int mesh_id)
 	}
 
 	if(lighting && material.light) {
-		float amb[4] = { (float)material.ambient.r / 31.0f, (float)material.ambient.g / 31.0f, (float)material.ambient.b / 31.0f, 1.0f };
-		float spec[4] = { material.specular.r / 31.0f, material.specular.g / 31.0f, material.specular.b / 31.0f, 1.0f };
+		float amb[3] = { (float)material.ambient.r / 31.0f, (float)material.ambient.g / 31.0f, (float)material.ambient.b / 31.0f };
+		float spec[3] = { material.specular.r / 31.0f, material.specular.g / 31.0f, material.specular.b / 31.0f };
 		glEnable(GL_LIGHTING);
 		glMaterialfv(GL_FRONT, GL_AMBIENT, amb);
 		glMaterialfv(GL_FRONT, GL_DIFFUSE, diff);
-		glUniform4fv(ambient, 1, amb);
-		glUniform4fv(diffuse, 1, diff);
-		glUniform4fv(specular, 1, spec);
+		glUniform3fv(ambient, 1, amb);
+		glUniform3fv(diffuse, 1, diff);
+		glUniform3fv(specular, 1, spec);
 		glUniform1i(use_light, 1);
+		if (scene->light_override)
+		{
+			Mtx44 light_transform;
+			Vec3 pos;
+			Vec3 vec1;
+			Vec3 vec2;
+			Vec3 octo_vec1;
+			Vec3 octo_vec2;
+			Vec3 light_vec;
+			pos.x = transform->m[3][0];
+			pos.y = transform->m[3][1];
+			pos.z = transform->m[3][2];
+			vec1.x = 0;
+			vec1.y = 1;
+			vec1.z = 0;
+			vec2.x = pos_x - pos.x;
+			vec2.y = 0;
+			vec2.z = pos_z - pos.z;
+			VEC_Normalize3(&vec2, &vec2);
+			octo_vec1.x = 0;
+			octo_vec1.y = 0.3005371f;
+			octo_vec1.z = -0.5f;
+			octo_vec2.x = 0;
+			octo_vec2.y = 0;
+			octo_vec2.z = -0.5f;
+			get_transform_mtx3(&light_transform, &vec2, &vec1);
+			MTX44MultVec(&light_transform, &octo_vec1, &light_vec);
+			VEC_Normalize3(&light_vec, &light_vec);
+			l1v_override[0] = light_vec.x;
+			l1v_override[1] = light_vec.y;
+			l1v_override[2] = light_vec.z;
+			glUniform3fv(light1vec, 1, l1v_override);
+			MTX44MultVec(&light_transform, &octo_vec2, &light_vec);
+			VEC_Normalize3(&light_vec, &light_vec);
+			l2v_override[0] = light_vec.x;
+			l2v_override[1] = light_vec.y;
+			l2v_override[2] = light_vec.z;
+			glUniform3fv(light2vec, 1, l2v_override);
+			l1c_override[0] = 1;
+			l1c_override[1] = 1;
+			l1c_override[2] = 1;
+			l2c_override[0] = 1;
+			l2c_override[1] = 1;
+			l2c_override[2] = 1;
+			glUniform3fv(light1col, 1, l1c_override);
+			glUniform3fv(light2col, 1, l2c_override);
+		}
+		else
+		{
+			use_room_lights();
+		}
 	} else {
 		glUniform1i(use_light, 0);
 	}
@@ -1767,10 +1869,7 @@ static void CModel_billboard(CNode* node)
 
 static void CModel_update_uniforms(float alpha)
 {
-	glUniform4fv(light1vec, 1, l1v);
-	glUniform4fv(light1col, 1, l1c);
-	glUniform4fv(light2vec, 1, l2v);
-	glUniform4fv(light2col, 1, l2c);
+	use_room_lights();
 	glUniform1i(fog_enable, fogen && !fogdis);
 	glUniform4fv(fog_color, 1, fogcol);
 	glUniform1i(fog_offset, fogoff);
@@ -1788,7 +1887,9 @@ struct RenderEntity {
 	CNode*		node;
 	int		mesh;
 	float		alpha;
+	float		mat_alpha;
 	int		mode;
+	int		poly_mode;
 	unsigned int	polygon_id;
 };
 
@@ -1806,9 +1907,6 @@ static void RenderEntity_get_position(RenderEntity* ent, Vec3* pos)
 	MTX44MultVec(&ent->transform, &pt, pos);
 }
 
-extern float pos_x;
-extern float pos_y;
-extern float pos_z;
 static float RenderEntity_get_distance(RenderEntity* ent)
 {
 	Vec3 pos;
@@ -1845,11 +1943,13 @@ void CModel_begin_scene(void)
 
 static void RenderEntity_render(RenderEntity* ent)
 {
+	glUniform1i(mat_mode, ent->poly_mode);
 	glUniform1f(alpha_scale, ent->alpha);
+	glUniform1f(mat_alpha, ent->mat_alpha / 31.0f);
 	glUniformMatrix4fv(model_matrix, 1, 0, ent->transform.a);
 	current_node = ent->node;
 	CModel_billboard(ent->node);
-	CModel_render_mesh(ent->model, ent->mesh);
+	CModel_render_mesh(ent->model, ent->mesh, &ent->transform);
 }
 
 void CModel_end_scene(void)
@@ -1870,8 +1970,6 @@ void CModel_end_scene(void)
 
 	// depth sort
 	// qsort(sorted, render_count, sizeof(RenderEntity*), RenderEntity_sort);
-
-	glUseProgram(shader);
 
 	CModel_update_uniforms(1.0);
 
@@ -1971,8 +2069,6 @@ void CModel_end_scene(void)
 	glDisable(GL_ALPHA_TEST);
 	glDisable(GL_STENCIL_TEST);
 
-	glUseProgram(0);
-
 	// release
 	for(i = 0; i < render_count; i++) {
 		free_to_heap(sorted[i]);
@@ -1983,7 +2079,7 @@ void CModel_end_scene(void)
 	last_render_node = NULL;
 }
 
-void CModel_add_model(CModel* scene, Mtx44* mtx, CNode* node, int mesh, float alpha, int mode, int polygon_id)
+void CModel_add_model(CModel* scene, Mtx44* mtx, CNode* node, int mesh, float alpha, float mat_alpha, int mode, int poly_mode, int polygon_id)
 {
 	RenderEntity* ent = (RenderEntity*)alloc_from_heap(sizeof(RenderEntity));
 	MTX44Copy(mtx, &ent->transform);
@@ -1991,7 +2087,9 @@ void CModel_add_model(CModel* scene, Mtx44* mtx, CNode* node, int mesh, float al
 	ent->node = node;
 	ent->mesh = mesh;
 	ent->alpha = alpha;
+	ent->mat_alpha = mat_alpha;
 	ent->mode = mode;
+	ent->poly_mode = poly_mode;
 	ent->polygon_id = polygon_id;
 	ent->next = NULL;
 	if(!render_list) {
@@ -2017,7 +2115,6 @@ void CModel_render_all(CModel* scene, Mtx44* mtx, float alpha)
 		process_node_animation(scene->node_animation, &mat, scene->scale);
 	}
 
-	glUseProgram(shader);
 	CModel_update_uniforms(alpha);
 
 	unsigned int polygon_id = next_polygon_id++;
@@ -2042,12 +2139,10 @@ void CModel_render_all(CModel* scene, Mtx44* mtx, float alpha)
 				int id = mesh_id + j;
 				CMesh* mesh = &scene->meshes[id];
 				CMaterial* material = &scene->materials[mesh->matid];
-				CModel_add_model(scene, &transform, node, id, alpha, material->render_mode, polygon_id);
+				CModel_add_model(scene, &transform, node, id, alpha, material->alpha, material->render_mode, material->polygon_mode, polygon_id);
 			}
 		}
 	}
-
-	glUseProgram(0);
 }
 
 void CModel_render_node(CModel* scene, Mtx44* mtx, int node_idx, float alpha)
@@ -2057,7 +2152,6 @@ void CModel_render_node(CModel* scene, Mtx44* mtx, int node_idx, float alpha)
 
 	MTX44ScaleApply(mtx, &mat, scene->scale, scene->scale, scene->scale);
 
-	glUseProgram(shader);
 	CModel_update_uniforms(alpha);
 
 	for(i = node_idx; i != -1; i = scene->nodes[i].next) {
@@ -2079,12 +2173,45 @@ void CModel_render_node(CModel* scene, Mtx44* mtx, int node_idx, float alpha)
 				unsigned int polygon_id = 0;
 				if(material->render_mode >= TRANSLUCENT)
 					polygon_id = next_polygon_id++;
-				CModel_add_model(scene, &transform, node, id, alpha, material->render_mode, polygon_id);
+				CModel_add_model(scene, &transform, node, id, alpha, material->alpha, material->render_mode, material->polygon_mode, polygon_id);
 				if(next_polygon_id > 255)
 					next_polygon_id = 0;
 			}
 		}
 	}
-
-	glUseProgram(0);
 }
+
+const float toon_values[TOON_SIZE * 3] = {
+	GetTableColor(0x2000),
+	GetTableColor(0x2000),
+	GetTableColor(0x2020),
+	GetTableColor(0x2021),
+	GetTableColor(0x2021),
+	GetTableColor(0x2041),
+	GetTableColor(0x2441),
+	GetTableColor(0x2461),
+	GetTableColor(0x2461),
+	GetTableColor(0x2462),
+	GetTableColor(0x2482),
+	GetTableColor(0x2482),
+	GetTableColor(0x28C3),
+	GetTableColor(0x2CE4),
+	GetTableColor(0x3105),
+	GetTableColor(0x3546),
+	GetTableColor(0x3967),
+	GetTableColor(0x3D88),
+	GetTableColor(0x41C9),
+	GetTableColor(0x45EA),
+	GetTableColor(0x4A0B),
+	GetTableColor(0x4E4B),
+	GetTableColor(0x526C),
+	GetTableColor(0x568D),
+	GetTableColor(0x5ACE),
+	GetTableColor(0x5EEF),
+	GetTableColor(0x6310),
+	GetTableColor(0x6751),
+	GetTableColor(0x6B72),
+	GetTableColor(0x6F93),
+	GetTableColor(0x73D4),
+	GetTableColor(0x77F5)
+};
