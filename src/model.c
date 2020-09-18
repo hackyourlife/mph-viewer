@@ -1829,8 +1829,7 @@ void CModel_render_mesh(CModel* scene, int mesh_id, MtxFx44* transform)
 			l2c_override[2] = 1;
 			glUniform3fv(light1col, 1, l1c_override);
 			glUniform3fv(light2col, 1, l2c_override);
-		}
-		else
+		} else
 		{
 			use_room_lights();
 		}
