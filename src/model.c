@@ -2112,8 +2112,6 @@ void CModel_render_all(CModel* scene, Mtx44* mtx, float alpha)
 		process_node_animation(scene->node_animation, &mat, scene->scale);
 	}
 
-	glUseProgram(shader);
-
 	unsigned int polygon_id = next_polygon_id++;
 	if(next_polygon_id > 255)
 		next_polygon_id = 0;
@@ -2140,8 +2138,6 @@ void CModel_render_all(CModel* scene, Mtx44* mtx, float alpha)
 			}
 		}
 	}
-
-	glUseProgram(0);
 }
 
 void CModel_render_node(CModel* scene, Mtx44* mtx, int node_idx, float alpha)
@@ -2150,8 +2146,6 @@ void CModel_render_node(CModel* scene, Mtx44* mtx, int node_idx, float alpha)
 	unsigned int i, j;
 
 	MTX44ScaleApply(mtx, &mat, scene->scale, scene->scale, scene->scale);
-
-	glUseProgram(shader);
 
 	for(i = node_idx; i != -1; i = scene->nodes[i].next) {
 		Mtx44 transform;
@@ -2178,8 +2172,6 @@ void CModel_render_node(CModel* scene, Mtx44* mtx, int node_idx, float alpha)
 			}
 		}
 	}
-
-	glUseProgram(0);
 }
 
 const float toon_values[TOON_SIZE * 3] = {
