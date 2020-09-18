@@ -44,6 +44,7 @@ static void load_artifact(unsigned int artifact_id)
 		if(!octolith_model) {
 			load_model(&octolith_model, "models/Octolith_Model.bin", 0);
 			load_animation(&octolith_anim, "models/Octolith_Anim.bin", octolith_model, 0);
+			octolith_model->light_override = true;
 		}
 	} else if(!artifact_models[artifact_id]) {
 		sprintf(filename, "models/Artifact%02d_mdl_Model.bin", artifact_id + 1);
