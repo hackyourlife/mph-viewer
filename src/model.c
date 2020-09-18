@@ -1718,7 +1718,7 @@ extern bool texturing;
 extern float pos_x;
 extern float pos_y;
 extern float pos_z;
-void CModel_render_mesh(CModel* scene, int mesh_id, MtxFx44* transform)
+void CModel_render_mesh(CModel* scene, int mesh_id, Mtx44* transform)
 {
 	if(mesh_id >= scene->num_meshes) {
 		printf("trying to render mesh %d, but scene only has %d meshes\n", mesh_id, scene->num_meshes);
