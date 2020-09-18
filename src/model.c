@@ -1783,8 +1783,7 @@ void CModel_render_mesh(CModel* scene, int mesh_id, MtxFx44* transform)
 		glUniform3fv(diffuse, 1, diff);
 		glUniform3fv(specular, 1, spec);
 		glUniform1i(use_light, 1);
-		if (scene->light_override)
-		{
+		if (scene->light_override) {
 			Mtx44 light_transform;
 			Vec3 pos;
 			Vec3 vec1;
@@ -1829,8 +1828,7 @@ void CModel_render_mesh(CModel* scene, int mesh_id, MtxFx44* transform)
 			l2c_override[2] = 1;
 			glUniform3fv(light1col, 1, l1c_override);
 			glUniform3fv(light2col, 1, l2c_override);
-		} else
-		{
+		} else {
 			use_room_lights();
 		}
 	} else {
