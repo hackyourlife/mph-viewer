@@ -1963,7 +1963,7 @@ void CModel_end_scene(void)
 	}
 
 	// depth sort
-	// qsort(sorted, render_count, sizeof(RenderEntity*), RenderEntity_sort);	
+	// qsort(sorted, render_count, sizeof(RenderEntity*), RenderEntity_sort);
 
 	glUseProgram(shader);
 
