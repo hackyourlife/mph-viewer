@@ -264,7 +264,6 @@ static void load_extensions(void)
 
 const char* vertex_shader = "\
 #version 120 \n\
-uniform bool is_billboard; \n\
 uniform bool use_light; \n\
 uniform bool fog_enable; \n\
 uniform vec3 light1vec; \n\
@@ -299,11 +298,7 @@ vec3 light_calc(vec3 light_vec, vec3 light_col, vec3 normal_vec, vec3 dif_col, v
 \n\
 void main() \n\
 { \n\
-	if(is_billboard) { \n\
-		gl_Position = projection * (view * model * vec4(0.0, 0.0, 0.0, 1.0) + vec4(gl_Vertex.xyz, 0.0)); \n\
-	} else { \n\
-		gl_Position = projection * view * model * gl_Vertex; \n\
-	} \n\
+	gl_Position = projection * view * model * gl_Vertex; \n\
 	if(use_light) { \n\
 		vec3 normal = normalize(mat3(model) * gl_Normal); \n\
 		vec3 dif = gl_Color.a < 0.5 ? gl_Color.rgb : diffuse; \n\
@@ -318,7 +313,6 @@ void main() \n\
 }";
 const char* fragment_shader = "\
 #version 120 \n\
-uniform bool is_billboard; \n\
 uniform bool use_texture; \n\
 uniform bool fog_enable; \n\
 uniform vec4 fog_color; \n\
@@ -376,7 +370,6 @@ void main() \n\
 }";
 
 static GLuint shader;
-static GLuint is_billboard;
 static GLuint use_light;
 static GLuint use_texture;
 static GLuint fog_enable;
@@ -503,7 +496,6 @@ void CModel_init(void)
 	glDetachShader(shader, vs);
 	glDetachShader(shader, fs);
 
-	is_billboard = glGetUniformLocation(shader, "is_billboard");
 	use_light = glGetUniformLocation(shader, "use_light");
 	use_texture = glGetUniformLocation(shader, "use_texture");
 	fog_enable = glGetUniformLocation(shader, "fog_enable");
@@ -1852,14 +1844,6 @@ void CModel_render_mesh(CModel* scene, int mesh_id, Mtx44* transform)
 	}
 }
 
-static void CModel_billboard(CNode* node)
-{
-	glUniform1i(is_billboard, node->type == 1);
-	if(node->type) {
-		// this is a billboard
-	}
-}
-
 static void CModel_update_uniforms()
 {
 	use_room_lights();
@@ -1934,6 +1918,22 @@ void CModel_begin_scene(void)
 	next_polygon_id = 1;
 }
 
+static void CModel_billboard(RenderEntity* ent)
+{
+	Mtx44 transform;
+	MTX44ClearRot(&ent->transform, &transform);
+	if (ent->node->type == 1)
+	{
+		MTX44Concat(&transform, &view_inv_xyrot, &transform);
+		glUniformMatrix4fv(model_matrix, 1, 0, transform.a);
+	}
+	else if (ent->node->type == 2)
+	{
+		MTX44Concat(&transform, &view_inv_yrot, &transform);
+		glUniformMatrix4fv(model_matrix, 1, 0, transform.a);
+	}
+}
+
 static void RenderEntity_render(RenderEntity* ent)
 {
 	glUniform1i(mat_mode, ent->poly_mode);
@@ -1941,7 +1941,14 @@ static void RenderEntity_render(RenderEntity* ent)
 	glUniform1f(mat_alpha, ent->mat_alpha / 31.0f);
 	glUniformMatrix4fv(model_matrix, 1, 0, ent->transform.a);
 	current_node = ent->node;
-	CModel_billboard(ent->node);
+	if (ent->node->type)
+	{
+		CModel_billboard(ent);
+	}
+	else
+	{
+		glUniformMatrix4fv(model_matrix, 1, 0, ent->transform.a);
+	}
 	CModel_render_mesh(ent->model, ent->mesh, &ent->transform);
 }
 

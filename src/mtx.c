@@ -198,3 +198,23 @@ void MTX44RotTrig(Mtx44* m, char axis, const float sinA, const float cosA)
 			break;
 	}
 }
+
+void MTX44ClearRot(const Mtx44* src, Mtx44* dst)
+{
+	dst->_00 = sqrt(src->_00 * src->_00 + src->_01 * src->_01 + src->_02 * src->_02);
+	dst->_01 = 0;
+	dst->_02 = 0;
+	dst->_03 = src->_03;
+	dst->_10 = 0;
+	dst->_11 = sqrt(src->_10 * src->_10 + src->_11 * src->_11 + src->_12 * src->_12);
+	dst->_12 = 0;
+	dst->_13 = src->_13;
+	dst->_20 = 0;
+	dst->_21 = 0;
+	dst->_22 = sqrt(src->_20 * src->_20 + src->_21 * src->_21 + src->_22 * src->_22);
+	dst->_23 = src->_23;
+	dst->_30 = src->_30;
+	dst->_31 = src->_31;
+	dst->_32 = src->_32;
+	dst->_33 = src->_33;
+}
