@@ -1922,16 +1922,12 @@ static void CModel_billboard(RenderEntity* ent)
 {
 	Mtx44 transform;
 	MTX44ClearRot(&ent->transform, &transform);
-	if (ent->node->type == 1)
-	{
+	if (ent->node->type == 1) {
 		MTX44Concat(&transform, &view_inv_xyrot, &transform);
-		glUniformMatrix4fv(model_matrix, 1, 0, transform.a);
-	}
-	else if (ent->node->type == 2)
-	{
+	} else if (ent->node->type == 2) {
 		MTX44Concat(&transform, &view_inv_yrot, &transform);
-		glUniformMatrix4fv(model_matrix, 1, 0, transform.a);
 	}
+	glUniformMatrix4fv(model_matrix, 1, 0, transform.a);
 }
 
 static void RenderEntity_render(RenderEntity* ent)
@@ -1941,12 +1937,9 @@ static void RenderEntity_render(RenderEntity* ent)
 	glUniform1f(mat_alpha, ent->mat_alpha / 31.0f);
 	glUniformMatrix4fv(model_matrix, 1, 0, ent->transform.a);
 	current_node = ent->node;
-	if (ent->node->type)
-	{
+	if (ent->node->type) {
 		CModel_billboard(ent);
-	}
-	else
-	{
+	} else {
 		glUniformMatrix4fv(model_matrix, 1, 0, ent->transform.a);
 	}
 	CModel_render_mesh(ent->model, ent->mesh, &ent->transform);
