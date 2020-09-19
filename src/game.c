@@ -86,8 +86,8 @@ void GAMERenderScene(float aspect)
 	MTX44Concat(&rotx, &roty, &rot);
 	MTX44Concat(&rot, &trans, &view);
 
-	MTX44RotRad(&inv_rotx, 'x', xrot / 180.0 * M_PI * -1);
-	MTX44RotRad(&view_inv_yrot, 'y', (360.0f - yrot) / 180.0 * M_PI * -1);
+	MTX44RotRad(&inv_rotx, 'x', -xrot / 180.0 * M_PI);
+	MTX44RotRad(&view_inv_yrot, 'y', -(360.0f - yrot) / 180.0 * M_PI);
 	MTX44Concat(&view_inv_yrot, &inv_rotx, &view_inv_xyrot);
 
 	glMatrixMode(GL_MODELVIEW);
