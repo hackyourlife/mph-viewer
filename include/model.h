@@ -249,7 +249,7 @@ int	get_node_child(const char* name, CModel* scene);
 void	scale_rotate_translate(Mtx44* mtx, float sx, float sy, float sz, float ax, float ay, float az, float x, float y, float z);
 void	CModel_init(void);
 void	CModel_setLights(float l1vec[3], float l1col[3], float l2vec[3], float l2col[3]);
-void	CModel_setFog(bool en, float fogc[4], int fogoffset);
+void	CModel_setFog(bool en, float fogc[4], int fogoffset, int fogslope);
 void	CModel_setFogDisable(bool dis);
 void	load_model(CModel** model, const char* filename, int flags);
 void	load_room_model(CModel** model, const char* filename, const char* txtrfilename, int flags, int layer_mask);
