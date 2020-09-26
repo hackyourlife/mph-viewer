@@ -64,19 +64,9 @@ void GAMEUnloadRoom(void)
 
 void GAMERenderScene(float aspect)
 {
-	float size_x = fabsf(room->model->max_x - room->model->min_x);
-	float size_y = fabsf(room->model->max_y - room->model->min_y);
-	float size_z = fabsf(room->model->max_z - room->model->min_z);
-	float size = size_x;
-	if(size_y > size) {
-		size = size_y;
-	}
-	if(size_z > size) {
-		size = size_z;
-	}
-
 	// projection
-	MTX44Perspective(&projection, 80.0f, aspect, 0.05f, 2 * size * room->model->scale);
+	float fardist = FX_FX32_TO_F32(room->description->far_clip_dist);
+	MTX44Perspective(&projection, 80.0f, aspect, 0.05f, fardist);
 
 	// view
 	Mtx44 trans, rotx, roty, rot, inv_rotx;

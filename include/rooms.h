@@ -18,9 +18,9 @@ typedef struct {
 	u32	time_limit;
 	s16	point_limit;
 	s16	layer_id;
-	u32	unk8;
+	s32	far_clip_dist;
 	u16	fog_enable;
-	u16	fog;
+	u16	clear_fog;
 	u16	fog_color;
 	s16	field_36;
 	u32	fog_slope;

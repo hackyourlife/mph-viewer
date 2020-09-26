@@ -265,7 +265,6 @@ static void load_extensions(void)
 const char* vertex_shader = "\
 #version 120 \n\
 uniform bool use_light; \n\
-uniform bool fog_enable; \n\
 uniform vec3 light1vec; \n\
 uniform vec3 light1col; \n\
 uniform vec3 light2vec; \n\
@@ -273,8 +272,6 @@ uniform vec3 light2col; \n\
 uniform vec3 diffuse; \n\
 uniform vec3 ambient; \n\
 uniform vec3 specular; \n\
-uniform vec4 fog_color; \n\
-uniform float far_plane; \n\
 uniform mat4 projection; \n\
 uniform mat4 view; \n\
 uniform mat4 model; \n\
@@ -316,7 +313,8 @@ const char* fragment_shader = "\
 uniform bool use_texture; \n\
 uniform bool fog_enable; \n\
 uniform vec4 fog_color; \n\
-uniform int fog_offset; \n\
+uniform float fog_min; \n\
+uniform float fog_max; \n\
 uniform float alpha_scale; \n\
 uniform sampler2D tex; \n\
 varying vec2 texcoord; \n\
@@ -353,17 +351,15 @@ void main() \n\
 		col.a *= mat_alpha; \n\
 	} \n\
 	if(fog_enable) { \n\
-		float ndcDepth = (2.0 * gl_FragCoord.z - gl_DepthRange.near - gl_DepthRange.far) / (gl_DepthRange.far - gl_DepthRange.near); \n\
-		float clipDepth = ndcDepth / gl_FragCoord.w; \n\
-		float depth = clamp(clipDepth / 128.0, 0.0, 1.0); \n\
-		float density = depth - (1.0 - float(fog_offset) / 65536.0); \n\
-		if(density < 0.0) \n\
-			density = 0.0; \n\
-		// adjust fog slope \n\
-		density = sqrt(density / 32.0); \n\
-		gl_FragColor = vec4((col * (1.0 - density) + fog_color * density).xyz, col.a * alpha_scale); \n\
-		// float i = density; \n\
-		// gl_FragColor = vec4(i, i, i, 1); \n\
+		float depth = gl_FragCoord.z; \n\
+		float density = 0.0; \n\
+		if (depth >= fog_max) { \n\
+			density = 1.0; \n\
+		} else if (depth > fog_min) { \n\
+			// MPH fog table has min 0 and max 124 \n\
+			density = (depth - fog_min) / (fog_max - fog_min) * 124.0 / 128.0; \n\
+		} \n\
+		gl_FragColor = vec4((col * (1.0 - density) + fog_color * density).xyz, col.a); \n\
 	} else { \n\
 		gl_FragColor = col * vec4(1.0, 1.0, 1.0, alpha_scale); \n\
 	} \n\
@@ -381,7 +377,8 @@ static GLuint diffuse;
 static GLuint ambient;
 static GLuint specular;
 static GLuint fog_color;
-static GLuint fog_offset;
+static GLuint fog_min;
+static GLuint fog_max;
 static GLuint alpha_scale;
 static GLuint proj_matrix;
 static GLuint view_matrix;
@@ -404,7 +401,8 @@ static float l2c_override[3];
 static bool fogen = false;
 static bool fogdis = false;
 static float fogcol[4];
-static int fogoff;
+static float fogmin;
+static float fogmax;
 
 void CModel_setLights(float l1vec[3], float l1col[3], float l2vec[3], float l2col[3])
 {
@@ -414,11 +412,12 @@ void CModel_setLights(float l1vec[3], float l1col[3], float l2vec[3], float l2co
 	memcpy(l2c, l2col, sizeof(float[3]));
 }
 
-void CModel_setFog(bool en, float fogc[4], int fogoffset)
+void CModel_setFog(bool en, float fogc[4], int fogoffset, int fogslope)
 {
 	fogen = en;
 	memcpy(fogcol, fogc, sizeof(float[4]));
-	fogoff = fogoffset;
+	fogmin = fogoffset / (float)0x7FFF;
+	fogmax = (fogoffset + 32 * (0x400 >> fogslope)) / (float)0x7FFF;
 }
 
 void CModel_setFogDisable(bool dis)
@@ -507,7 +506,8 @@ void CModel_init(void)
 	ambient = glGetUniformLocation(shader, "ambient");
 	specular = glGetUniformLocation(shader, "specular");
 	fog_color = glGetUniformLocation(shader, "fog_color");
-	fog_offset = glGetUniformLocation(shader, "fog_offset");
+	fog_min = glGetUniformLocation(shader, "fog_min");
+	fog_max = glGetUniformLocation(shader, "fog_max");
 	alpha_scale = glGetUniformLocation(shader, "alpha_scale");
 	proj_matrix = glGetUniformLocation(shader, "projection");
 	view_matrix = glGetUniformLocation(shader, "view");
@@ -1849,7 +1849,8 @@ static void CModel_update_uniforms()
 	use_room_lights();
 	glUniform1i(fog_enable, fogen && !fogdis);
 	glUniform4fv(fog_color, 1, fogcol);
-	glUniform1i(fog_offset, fogoff);
+	glUniform1f(fog_min, fogmin);
+	glUniform1f(fog_max, fogmax);
 	glUniform1f(alpha_scale, 1.0f);
 	glUniformMatrix4fv(proj_matrix, 1, 0, projection.a);
 	glUniformMatrix4fv(view_matrix, 1, 0, view.a);

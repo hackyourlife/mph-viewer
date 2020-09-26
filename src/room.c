@@ -134,7 +134,7 @@ void CRoom_render(CRoom* room)
 	float fogcolor[4] = { COLOR_R(room->description->fog_color), COLOR_G(room->description->fog_color), COLOR_B(room->description->fog_color), 1 };
 	MTX44Trans(&mtx, FX_FX32_TO_F32(room->pos.x), FX_FX32_TO_F32(room->pos.y), FX_FX32_TO_F32(room->pos.z));
 	CRoom_setLights(room);
-	CModel_setFog(room->description->fog_enable, fogcolor, room->description->fog_offset);
+	CModel_setFog(room->description->fog_enable, fogcolor, room->description->fog_offset & 0x7FFF, room->description->fog_slope);
 	for(ref = room->room_nodes; ref; ref = ref->next) {
 		CModel_render_node(room->model, &mtx, ref->node_id, 1.0);
 	}
