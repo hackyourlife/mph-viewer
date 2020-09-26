@@ -15,5 +15,6 @@ void MTX44Scale(Mtx44* m, const float x, const float y, const float z);
 void MTX44ScaleApply(const Mtx44* src, Mtx44* dst, const float x, const float y, const float z);
 void MTX44RotRad(Mtx44* m, const char axis, const float rad);
 void MTX44RotTrig(Mtx44* m, char axis, const float sinA, const float cosA);
+void MTX44ClearRot(const Mtx44* src, Mtx44* dst);
 
 #endif

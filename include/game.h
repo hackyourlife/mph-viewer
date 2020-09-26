@@ -18,6 +18,8 @@ extern State game_state;
 
 extern Mtx44 projection;
 extern Mtx44 view;
+extern Mtx44 view_inv_yrot;
+extern Mtx44 view_inv_xyrot;
 
 extern StringTable game_messages;
 extern StringTable location_names;
