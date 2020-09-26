@@ -359,9 +359,9 @@ void main() \n\
 			// MPH fog table has min 0 and max 124 \n\
 			density = (depth - fog_min) / (fog_max - fog_min) * 124.0 / 128.0; \n\
 		} \n\
-		gl_FragColor = vec4((col * (1.0 - density) + fog_color * density).xyz, col.a); \n\
+		gl_FragColor = vec4((col * (1.0 - density) + fog_color * density).xyz, col.a * alpha_scale); \n\
 	} else { \n\
-		gl_FragColor = col * vec4(1.0, 1.0, 1.0, alpha_scale); \n\
+		gl_FragColor = col * vec4(1.0, 1.0, 1.0, col.a * alpha_scale); \n\
 	} \n\
 }";
 
