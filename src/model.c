@@ -361,7 +361,7 @@ void main() \n\
 		} \n\
 		gl_FragColor = vec4((col * (1.0 - density) + fog_color * density).xyz, col.a * alpha_scale); \n\
 	} else { \n\
-		gl_FragColor = col * vec4(1.0, 1.0, 1.0, col.a * alpha_scale); \n\
+		gl_FragColor = col * vec4(1.0, 1.0, 1.0, alpha_scale); \n\
 	} \n\
 }";
 
