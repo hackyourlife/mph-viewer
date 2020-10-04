@@ -1386,7 +1386,7 @@ CModel* CModel_load(u8* scenedata, unsigned int scenesize, u8* texturedata, unsi
 	scene->num_node_weight = rawheader->num_node_weight;
 	if (scene->num_node_weight > 0 && rawheader->node_weights) {
 		int* ids = (int*)((uintptr_t)scenedata + (uintptr_t)get32bit_LE((u8*)&rawheader->node_weights));
-		scene->node_weight_ids = (int*)malloc(rawheader->node_weights * sizeof(int));
+		scene->node_weight_ids = (int*)malloc(scene->num_node_weight * sizeof(int));
 		for (int i = 0; i < scene->num_node_weight; i++) {
 			scene->node_weight_ids[i] = ids[i];
 		}
