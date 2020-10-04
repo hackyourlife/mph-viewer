@@ -2136,7 +2136,8 @@ void CModel_render_all(CModel* scene, Mtx44* mtx, float alpha)
 	Mtx44 mat;
 	unsigned int i, j;
 
-	MTX44ScaleApply(mtx, &mat, scene->scale, scene->scale, scene->scale);
+	MTX44Scale(&mat, scene->scale, scene->scale, scene->scale);
+	MTX44Concat(mtx, &mat, &mat);
 
 	if(scene->node_animation) {
 		process_node_animation(scene->node_animation, &mat, scene->scale);
@@ -2205,7 +2206,8 @@ void CModel_render_node(CModel* scene, Mtx44* mtx, int node_idx, float alpha)
 	Mtx44 mat;
 	unsigned int i, j;
 
-	MTX44ScaleApply(mtx, &mat, scene->scale, scene->scale, scene->scale);
+	MTX44Scale(&mat, scene->scale, scene->scale, scene->scale);
+	MTX44Concat(mtx, &mat, &mat);
 
 	for(i = node_idx; i != -1; i = scene->nodes[i].next) {
 		Mtx44 transform;
