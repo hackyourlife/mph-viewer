@@ -185,10 +185,10 @@ typedef struct {
 	u32		materials;
 	u32		dlists;
 	u32		nodes;
-	u16		node_anim_count;
+	u16		num_node_weight;
 	u8		flags;
 	u8		field_1F;
-	u32		some_node_id;
+	u32		node_weights;
 	u32		meshes;
 	u16		num_textures;
 	u16		field_2A;
@@ -274,8 +274,8 @@ uniform vec3 ambient; \n\
 uniform vec3 specular; \n\
 uniform mat4 projection; \n\
 uniform mat4 view; \n\
-uniform mat4 model; \n\
 uniform mat4 texcoordmtx; \n\
+uniform mat4[32] mtx_stack; \n\
 \n\
 varying vec2 texcoord; \n\
 varying vec4 color; \n\
@@ -295,6 +295,7 @@ vec3 light_calc(vec3 light_vec, vec3 light_col, vec3 normal_vec, vec3 dif_col, v
 \n\
 void main() \n\
 { \n\
+	mat4 model = mtx_stack[int(gl_MultiTexCoord0.z)]; \n\
 	gl_Position = projection * view * model * gl_Vertex; \n\
 	if(use_light) { \n\
 		vec3 normal = normalize(mat3(model) * gl_Normal); \n\
@@ -306,7 +307,7 @@ void main() \n\
 	} else { \n\
 		color = vec4(gl_Color.rgb, 1.0); \n\
 	} \n\
-	texcoord = vec2(texcoordmtx * gl_MultiTexCoord0); \n\
+	texcoord = vec2(texcoordmtx * vec4(gl_MultiTexCoord0.xy, 0, 1)); \n\
 }";
 const char* fragment_shader = "\
 #version 120 \n\
@@ -382,7 +383,7 @@ static GLuint fog_max;
 static GLuint alpha_scale;
 static GLuint proj_matrix;
 static GLuint view_matrix;
-static GLuint model_matrix;
+static GLuint matrix_stack;
 static GLuint texcoord_matrix;
 static GLuint mat_alpha;
 static GLuint mat_mode;
@@ -511,7 +512,7 @@ void CModel_init(void)
 	alpha_scale = glGetUniformLocation(shader, "alpha_scale");
 	proj_matrix = glGetUniformLocation(shader, "projection");
 	view_matrix = glGetUniformLocation(shader, "view");
-	model_matrix = glGetUniformLocation(shader, "model");
+	matrix_stack = glGetUniformLocation(shader, "mtx_stack");
 	texcoord_matrix = glGetUniformLocation(shader, "texcoordmtx");
 	mat_alpha = glGetUniformLocation(shader, "mat_alpha");
 	mat_mode = glGetUniformLocation(shader, "mat_mode");
@@ -610,7 +611,7 @@ static void update_bounds(CModel* scene, float vtx_state[3])
 	}
 }
 
-static void do_reg(u32 reg, u32** data_pp, float vtx_state[3], CModel* scene)
+static void do_reg(u32 reg, u32** data_pp, float vtx_state[3], float uv_state[2], unsigned int* mtx_id, CModel* scene)
 {
 	u32* data = *data_pp;
 
@@ -622,7 +623,12 @@ static void do_reg(u32 reg, u32** data_pp, float vtx_state[3], CModel* scene)
 
 		//MTX_RESTORE
 		case 0x450: {
-			u32 idx = *(data++);
+			u32 index = *(data++);
+			// e.g. rooms don't use weight IDs, so keep the index at 0
+			if (scene->num_node_weight > 0) {
+				*mtx_id = index;
+			}
+			glTexCoord3f(uv_state[0], uv_state[1], (float)(*mtx_id));
 		}
 		break;
 
@@ -651,7 +657,9 @@ static void do_reg(u32 reg, u32** data_pp, float vtx_state[3], CModel* scene)
 			u32 st = *(data++);
 			s32 s = (st >>  0) & 0xFFFF;			if(s & 0x8000)		s |= 0xFFFF0000;
 			s32 t = (st >> 16) & 0xFFFF;			if(t & 0x8000)		t |= 0xFFFF0000;
-			glTexCoord2f(((float)s) / 16.0f, ((float)t) / 16.0f);
+			uv_state[0] = ((float)s) / 16.0f;
+			uv_state[1] = ((float)t) / 16.0f;
+			glTexCoord3f(uv_state[0], uv_state[1], (float)(*mtx_id));
 		}
 		break;
 
@@ -796,7 +804,10 @@ static void do_dlist(u32* data, u32 len, CModel* scene)
 	u32* end = data + len / 4;
 
 	float vtx_state[3] = { 0.0f, 0.0f, 0.0f };
+	float uv_state[2] = { 0.0f, 0.0f };
+	unsigned int mtx_id = 0;
 
+	glTexCoord3f(0.0f, 0.0f, 0.0f);
 	while(data < end) {
 		u32 regs = *(data++);
 
@@ -804,9 +815,10 @@ static void do_dlist(u32* data, u32 len, CModel* scene)
 		for(c = 0; c < 4; c++,regs >>= 8) {
 			u32 reg = ((regs & 0xFF) << 2) + 0x400;
 
-			do_reg(reg, &data, vtx_state, scene);
+			do_reg(reg, &data, vtx_state, uv_state, &mtx_id, scene);
 		}
 	}
+	glTexCoord3f(0.0f, 0.0f, 0.0f);
 }
 
 static void build_meshes(CModel* scene, Mesh* meshes, Dlist* dlists, unsigned int mesh_count, void* scenedata)
@@ -1371,6 +1383,15 @@ CModel* CModel_load(u8* scenedata, unsigned int scenesize, u8* texturedata, unsi
 		CModel_filter_nodes(scene, layer_mask);
 	}
 
+	scene->num_node_weight = rawheader->num_node_weight;
+	if (scene->num_node_weight > 0 && rawheader->node_weights) {
+		int* ids = (int*)((uintptr_t)scenedata + (uintptr_t)get32bit_LE((u8*)&rawheader->node_weights));
+		scene->node_weight_ids = (int*)malloc(scene->num_node_weight * sizeof(int));
+		for (int i = 0; i < scene->num_node_weight; i++) {
+			scene->node_weight_ids[i] = ids[i];
+		}
+	}
+
 	printf("scale: %f\n", scene->scale);
 	printf("%d materials, %d palettes, %d textures\n", scene->num_materials, scene->num_palettes, scene->num_textures);
 
@@ -1861,6 +1882,7 @@ typedef struct RenderEntity RenderEntity;
 struct RenderEntity {
 	RenderEntity*	next;
 	Mtx44		transform;
+	Mtx44*		mtx_stack;
 	CModel*		model;
 	CNode*		node;
 	int		mesh;
@@ -1871,10 +1893,17 @@ struct RenderEntity {
 	unsigned int	polygon_id;
 };
 
+typedef struct MatrixStack MatrixStack;
+struct MatrixStack {
+	MatrixStack* next;
+	Mtx44* matrices;
+};
+
 static unsigned int next_polygon_id;
 static unsigned int render_count;
 static RenderEntity* render_list;
 static RenderEntity* last_render_node;
+static MatrixStack* matrix_stacks;
 
 static void RenderEntity_get_position(RenderEntity* ent, Vec3* pos)
 {
@@ -1915,20 +1944,9 @@ void CModel_begin_scene(void)
 {
 	render_list = NULL;
 	last_render_node = NULL;
+	matrix_stacks = NULL;
 	render_count = 0;
 	next_polygon_id = 1;
-}
-
-static void CModel_billboard(RenderEntity* ent)
-{
-	Mtx44 transform;
-	MTX44ClearRot(&ent->transform, &transform);
-	if (ent->node->type == 1) {
-		MTX44Concat(&transform, &view_inv_xyrot, &transform);
-	} else if (ent->node->type == 2) {
-		MTX44Concat(&transform, &view_inv_yrot, &transform);
-	}
-	glUniformMatrix4fv(model_matrix, 1, 0, transform.a);
 }
 
 static void RenderEntity_render(RenderEntity* ent)
@@ -1936,12 +1954,11 @@ static void RenderEntity_render(RenderEntity* ent)
 	glUniform1i(mat_mode, ent->poly_mode);
 	glUniform1f(alpha_scale, ent->alpha);
 	glUniform1f(mat_alpha, ent->mat_alpha / 31.0f);
-	glUniformMatrix4fv(model_matrix, 1, 0, ent->transform.a);
 	current_node = ent->node;
-	if (ent->node->type) {
-		CModel_billboard(ent);
+	if (ent->model->num_node_weight == 0) {
+		glUniformMatrix4fv(matrix_stack, 1, 0, &ent->transform);
 	} else {
-		glUniformMatrix4fv(model_matrix, 1, 0, ent->transform.a);
+		glUniformMatrix4fv(matrix_stack, ent->model->num_node_weight, 0, ent->mtx_stack);
 	}
 	CModel_render_mesh(ent->model, ent->mesh, &ent->transform);
 }
@@ -2072,15 +2089,27 @@ void CModel_end_scene(void)
 		free_to_heap(sorted[i]);
 	}
 
+	MatrixStack* stack = matrix_stacks;
+	while (stack) {
+		struct MatrixStack* next = stack->next;
+		free_to_heap(stack);
+		stack = next;
+	}
+
 	free_to_heap(sorted);
 	render_list = NULL;
 	last_render_node = NULL;
+	matrix_stacks = NULL;
 }
 
-void CModel_add_model(CModel* scene, Mtx44* mtx, CNode* node, int mesh, float alpha, float mat_alpha, int mode, int poly_mode, int polygon_id)
+void CModel_add_model(CModel* scene, Mtx44* mtx, MatrixStack* mtx_stack, CNode* node, int mesh, float alpha, float mat_alpha, int mode, int poly_mode, int polygon_id)
 {
 	RenderEntity* ent = (RenderEntity*)alloc_from_heap(sizeof(RenderEntity));
-	MTX44Copy(mtx, &ent->transform);
+	if (mtx_stack) {
+		ent->mtx_stack = mtx_stack->matrices;
+	} else {
+		MTX44Copy(mtx, &ent->transform);
+	}
 	ent->model = scene;
 	ent->node = node;
 	ent->mesh = mesh;
@@ -2107,7 +2136,8 @@ void CModel_render_all(CModel* scene, Mtx44* mtx, float alpha)
 	Mtx44 mat;
 	unsigned int i, j;
 
-	MTX44ScaleApply(mtx, &mat, scene->scale, scene->scale, scene->scale);
+	MTX44Scale(&mat, scene->scale, scene->scale, scene->scale);
+	MTX44Concat(mtx, &mat, &mat);
 
 	if(scene->node_animation) {
 		process_node_animation(scene->node_animation, &mat, scene->scale);
@@ -2116,26 +2146,56 @@ void CModel_render_all(CModel* scene, Mtx44* mtx, float alpha)
 	unsigned int polygon_id = next_polygon_id++;
 	if(next_polygon_id > 255)
 		next_polygon_id = 0;
+
+	MatrixStack* stack = NULL;
+	if (scene->num_node_weight > 0) {
+		stack = (MatrixStack*)malloc(sizeof(MatrixStack));
+		stack->matrices = (Mtx44*)malloc(scene->num_node_weight * sizeof(Mtx44));
+		for (int i = 0; i < scene->num_node_weight; i++) {
+			MTX44Identity(&stack->matrices[i]);
+		}
+		stack->next = matrix_stacks;
+		matrix_stacks = stack;
+	}
+
 	for(i = 0; i < scene->num_nodes; i++) {
 		Mtx44 transform;
+		Mtx44 billboard;
 		CNode* node = &scene->nodes[i];
 		current_node = node;
-		if(node->mesh_count) {
-			int mesh_id = node->mesh_id / 2;
 
-			if(scene->node_animation) {
-				MTX44Copy(&node->node_transform, &transform);
-			} else if(scene->apply_transform) {
-				MTX44Concat(&mat, &node->node_transform, &transform);
-			} else {
-				MTX44Copy(&mat, &transform);
+		if(scene->node_animation) {
+			MTX44Copy(&node->node_transform, &transform);
+		} else if(scene->apply_transform) {
+			MTX44Concat(&mat, &node->node_transform, &transform);
+		} else {
+			MTX44Copy(&mat, &transform);
+		}
+
+		if (node->type) {
+			MTX44ClearRot(&transform, &billboard);
+			if (node->type == 1) {
+				MTX44Concat(&billboard, &view_inv_xyrot, &billboard);
+			} else if (node->type == 2) {
+				MTX44Concat(&billboard, &view_inv_yrot, &billboard);
 			}
+			MTX44Copy(&billboard, &transform);
+		}
 
+		for (j = 0; j < scene->num_node_weight; j++) {
+			if (scene->node_weight_ids[j] == i) {
+				MTX44Copy(&transform, &stack->matrices[j]);
+				break;
+			}
+		}
+
+		if (node->mesh_count) {
+			int mesh_id = node->mesh_id / 2;
 			for(j = 0; j < node->mesh_count; j++) {
 				int id = mesh_id + j;
 				CMesh* mesh = &scene->meshes[id];
 				CMaterial* material = &scene->materials[mesh->matid];
-				CModel_add_model(scene, &transform, node, id, alpha, material->alpha, material->render_mode, material->polygon_mode, polygon_id);
+				CModel_add_model(scene, &transform, stack, node, id, alpha, material->alpha, material->render_mode, material->polygon_mode, polygon_id);
 			}
 		}
 	}
@@ -2146,7 +2206,8 @@ void CModel_render_node(CModel* scene, Mtx44* mtx, int node_idx, float alpha)
 	Mtx44 mat;
 	unsigned int i, j;
 
-	MTX44ScaleApply(mtx, &mat, scene->scale, scene->scale, scene->scale);
+	MTX44Scale(&mat, scene->scale, scene->scale, scene->scale);
+	MTX44Concat(mtx, &mat, &mat);
 
 	for(i = node_idx; i != -1; i = scene->nodes[i].next) {
 		Mtx44 transform;
@@ -2167,7 +2228,7 @@ void CModel_render_node(CModel* scene, Mtx44* mtx, int node_idx, float alpha)
 				unsigned int polygon_id = 0;
 				if(material->render_mode >= TRANSLUCENT)
 					polygon_id = next_polygon_id++;
-				CModel_add_model(scene, &transform, node, id, alpha, material->alpha, material->render_mode, material->polygon_mode, polygon_id);
+				CModel_add_model(scene, &transform, NULL, node, id, alpha, material->alpha, material->render_mode, material->polygon_mode, polygon_id);
 				if(next_polygon_id > 255)
 					next_polygon_id = 0;
 			}
