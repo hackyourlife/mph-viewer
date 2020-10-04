@@ -229,6 +229,9 @@ typedef struct {
 	Vec3*				node_initial_pos;
 	Mtx44*				texture_matrices;
 
+	int					num_node_weight;
+	int*				node_weight_ids;
+
 	bool				apply_transform;
 	bool				light_override;
 
