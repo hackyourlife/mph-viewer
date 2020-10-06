@@ -1956,9 +1956,9 @@ static void RenderEntity_render(RenderEntity* ent)
 	glUniform1f(mat_alpha, ent->mat_alpha / 31.0f);
 	current_node = ent->node;
 	if (ent->model->num_node_weight == 0) {
-		glUniformMatrix4fv(matrix_stack, 1, 0, &ent->transform);
+		glUniformMatrix4fv(matrix_stack, 1, 0, ent->transform.a);
 	} else {
-		glUniformMatrix4fv(matrix_stack, ent->model->num_node_weight, 0, ent->mtx_stack);
+		glUniformMatrix4fv(matrix_stack, ent->model->num_node_weight, 0, ent->mtx_stack->a);
 	}
 	CModel_render_mesh(ent->model, ent->mesh, &ent->transform);
 }
@@ -2092,6 +2092,7 @@ void CModel_end_scene(void)
 	MatrixStack* stack = matrix_stacks;
 	while (stack) {
 		struct MatrixStack* next = stack->next;
+		free_to_heap(stack->matrices);
 		free_to_heap(stack);
 		stack = next;
 	}
